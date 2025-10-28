@@ -98,3 +98,6 @@ Thumbs.db
 
 # Wrangler
 .wrangler/
+
+# Project setup guides (local reference only)
+PROJECT_SETUP_GUIDE.md
