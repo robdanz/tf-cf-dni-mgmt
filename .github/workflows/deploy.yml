@@ -26,6 +26,21 @@ jobs:
     - name: Run tests
       run: npm test
       
+    - name: Check Cloudflare secrets
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      run: |
+        if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+          echo "❌ ERROR: CLOUDFLARE_API_TOKEN secret is not set"
+          echo "Please add it in: Settings → Secrets and variables → Actions → New repository secret"
+          exit 1
+        fi
+        if [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
+          echo "❌ ERROR: CLOUDFLARE_ACCOUNT_ID secret is not set"
+          echo "Please add it in: Settings → Secrets and variables → Actions → New repository secret"
+          exit 1
+        fi
+        echo "✅ Cloudflare secrets configured"
+
     - name: Deploy to Cloudflare Workers
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: cloudflare/wrangler-action@v3
