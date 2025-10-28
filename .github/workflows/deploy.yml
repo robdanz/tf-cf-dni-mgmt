@@ -43,11 +43,10 @@ jobs:
 
     - name: Deploy to Cloudflare Workers
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: cloudflare/wrangler-action@v3
-      with:
-        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        command: deploy
+      run: |
+        npx wrangler deploy \
+          --api-token=${{ secrets.CLOUDFLARE_API_TOKEN }} \
+          --account-id=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       env:
-        # Add any additional environment variables that need to be available during deployment
-        ENVIRONMENT: production
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
