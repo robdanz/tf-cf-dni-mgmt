@@ -4,14 +4,13 @@ compatibility_date = "2023-12-01"
 
 [env.production]
 name = "cf-analyst"
+vars = { ENVIRONMENT = "production" }
 
 [env.staging]
 name = "cf-analyst-staging"
+vars = { ENVIRONMENT = "staging" }
 
 # Uncomment and configure these as needed
-[vars]
-ENVIRONMENT = "production"
-
 # [[kv_namespaces]]
 # binding = "MY_KV_NAMESPACE"
 # id = "your-kv-namespace-id"
