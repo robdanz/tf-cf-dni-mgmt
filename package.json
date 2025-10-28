@@ -26,9 +26,8 @@
     "jest": "^29.7.0",
     "prettier": "^3.1.0",
     "typescript": "^5.3.2",
-    "wrangler": "^3.19.0"
+    "wrangler": "^4.45.1"
   },
-  "dependencies": {},
   "jest": {
     "testEnvironment": "node",
     "testMatch": [

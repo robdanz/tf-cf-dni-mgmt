@@ -9,8 +9,8 @@ name = "cf-analyst"
 name = "cf-analyst-staging"
 
 # Uncomment and configure these as needed
-# [vars]
-# ENVIRONMENT = "production"
+[vars]
+ENVIRONMENT = "production"
 
 # [[kv_namespaces]]
 # binding = "MY_KV_NAMESPACE"
