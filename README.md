@@ -61,8 +61,29 @@ cf-analyst/
 The `.dev.vars` file is used for local development and contains sensitive information. It's automatically ignored by git and should never be committed to the repository.
 
 For production deployment, configure environment variables in:
-- Cloudflare Workers dashboard
-- GitHub Actions secrets
+- **GitHub Actions secrets** (for CI/CD deployment)
+- **Cloudflare Workers** (for runtime use in production)
+
+To add secrets to your Cloudflare Worker in production, you can either:
+
+1. **Use the helper script** (recommended):
+   ```bash
+   ./scripts/manage-secrets.sh put SECRET_NAME production
+   ```
+
+2. **Use `wrangler secret put` command**:
+   ```bash
+   npx wrangler secret put SECRET_NAME --env production
+   ```
+   This will prompt you to enter the secret value securely.
+
+3. **Set non-sensitive variables via wrangler.toml**:
+   ```toml
+   [env.production.vars]
+   ENVIRONMENT = "production"
+   ```
+
+For detailed deployment and secret management instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Deployment
 

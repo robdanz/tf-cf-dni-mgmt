@@ -33,3 +33,6 @@ jobs:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         command: deploy
+      env:
+        # Add any additional environment variables that need to be available during deployment
+        ENVIRONMENT: production
