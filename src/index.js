@@ -88,14 +88,34 @@ export default {
 
 /**
  * Validate Cloudflare Access token and extract user email
+ * Reads from CF_Authorization cookie set by Cloudflare Access
  */
 async function handleAuthValidation(request, corsHeaders) {
   try {
-    const authHeader = request.headers.get('CF-Authorization');
+    // Check for CF_Authorization cookie (set by Cloudflare Access)
+    const cookieHeader = request.headers.get('Cookie') || '';
+    let token = null;
     
-    if (!authHeader) {
+    // Extract CF_Authorization cookie value
+    const cookies = cookieHeader.split(';').map(c => c.trim());
+    for (const cookie of cookies) {
+      if (cookie.startsWith('CF_Authorization=')) {
+        token = cookie.substring('CF_Authorization='.length);
+        break;
+      }
+    }
+    
+    // Fallback: Check for CF-Authorization header
+    if (!token) {
+      const authHeader = request.headers.get('CF-Authorization');
+      if (authHeader) {
+        token = authHeader.replace('Bearer ', '');
+      }
+    }
+    
+    if (!token) {
       return new Response(JSON.stringify({
-        error: 'No authorization header',
+        error: 'No authorization token found',
         authenticated: false
       }), {
         status: 401,
@@ -106,15 +126,10 @@ async function handleAuthValidation(request, corsHeaders) {
       });
     }
 
-    // Parse the CF-Authorization token
-    // Format: Bearer <token>
-    const token = authHeader.replace('Bearer ', '');
+    // Decode and validate the token
+    const userInfo = await validateCloudflareToken(token);
     
-    // For now, we'll simulate token validation
-    // In production, you'd validate against Cloudflare's API
-    const userEmail = await validateCloudflareToken(token);
-    
-    if (!userEmail) {
+    if (!userInfo || !userInfo.email) {
       return new Response(JSON.stringify({
         error: 'Invalid token',
         authenticated: false
@@ -130,8 +145,9 @@ async function handleAuthValidation(request, corsHeaders) {
     return new Response(JSON.stringify({
       authenticated: true,
       user: {
-        email: userEmail,
-        name: userEmail.split('@')[0]
+        email: userInfo.email,
+        name: userInfo.name || userInfo.email.split('@')[0],
+        groups: userInfo.groups || []
       }
     }), {
       headers: {
@@ -156,23 +172,56 @@ async function handleAuthValidation(request, corsHeaders) {
 }
 
 /**
- * Simulate Cloudflare token validation
- * In production, validate against Cloudflare's API
+ * Decode and validate Cloudflare Access JWT token
+ * Extracts user email from the JWT payload
  */
 async function validateCloudflareToken(token) {
-  // For development/demo purposes, we'll simulate validation
-  // In production, you would:
-  // 1. Verify the token signature with Cloudflare's public keys
-  // 2. Check token expiration
-  // 3. Extract user claims
-  
-  if (token && token.length > 10) {
-    // Simulate extracting email from token
-    // In real implementation, this would come from JWT claims
-    return 'user@example.com';
+  try {
+    // Cloudflare Access tokens are JWTs with 3 parts: header.payload.signature
+    const parts = token.split('.');
+    
+    if (parts.length !== 3) {
+      console.error('Invalid JWT format');
+      return null;
+    }
+
+    // Decode the payload (base64url encoded)
+    // Note: In production, you should also verify the signature!
+    const payload = parts[1];
+    
+    // Add padding if needed for base64 decoding
+    const paddedPayload = payload + '='.repeat((4 - payload.length % 4) % 4);
+    
+    // Decode the payload
+    const decodedPayload = atob(paddedPayload.replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(decodedPayload);
+    
+    // Extract user information from JWT claims
+    const email = claims.email || claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || claims.sub;
+    
+    if (!email) {
+      console.error('No email found in token claims');
+      return null;
+    }
+
+    // Check token expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (claims.exp && claims.exp < now) {
+      console.error('Token has expired');
+      return null;
+    }
+
+    return {
+      email: email,
+      name: claims.name || claims.preferred_username || email.split('@')[0],
+      groups: claims.groups || [],
+      claims: claims
+    };
+
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return null;
   }
-  
-  return null;
 }
 
 /**
