@@ -89,9 +89,30 @@ export default {
 /**
  * Validate Cloudflare Access token and extract user email
  * Reads from CF_Authorization cookie set by Cloudflare Access
+ * For localhost, returns a test user without token validation
  */
 async function handleAuthValidation(request, corsHeaders) {
   try {
+    const url = new URL(request.url);
+    
+    // If running locally (localhost), return test user without token validation
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return new Response(JSON.stringify({
+        authenticated: true,
+        user: {
+          email: 'testing@tancow.net',
+          name: 'Testing User',
+          groups: ['admin', 'testers']
+        },
+        local: true
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        }
+      });
+    }
+    
     // Check for CF_Authorization cookie (set by Cloudflare Access)
     const cookieHeader = request.headers.get('Cookie') || '';
     let token = null;
