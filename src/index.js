@@ -29,14 +29,6 @@ export default {
     try {
       // Route handling
       switch (url.pathname) {
-        case '/':
-          return new Response(await getMainPage(), {
-            headers: {
-              'Content-Type': 'text/html',
-              ...corsHeaders
-            }
-          });
-
         case '/api/auth/validate':
           return handleAuthValidation(request, corsHeaders);
 
@@ -46,6 +38,30 @@ export default {
               'Content-Type': 'application/json',
               ...corsHeaders
             }
+          });
+
+        case '/api/traffic':
+          return new Response(JSON.stringify({ summary: {}, timeline: [], applications: [], countries: [], actions: [], users: [], warning: 'Add traffic API implementation' }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+
+        case '/api/network':
+          return new Response(JSON.stringify({ totalSessions: 0, avgRtt: 0, totalBytes: 0, warning: 'Add network API implementation' }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+
+        case '/api/gateway/lists':
+          return new Response(JSON.stringify({ lists: [], error: 'Add Gateway lists API implementation' }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+
+        case '/api/gateway/lists/move':
+          if (request.method !== 'POST') {
+            return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          }
+          return new Response(JSON.stringify({ error: 'Add Gateway list move API implementation' }), {
+            status: 501,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
 
         case '/health':

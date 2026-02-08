@@ -1,0 +1,68 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: #333;
+}
+.app-container { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 280px;
+  background: rgba(255,255,255,0.95);
+  border-right: 1px solid rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 20px rgba(0,0,0,0.1);
+}
+.sidebar-header { padding: 2rem 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.1); }
+.logo { font-size: 1.5rem; font-weight: 700; color: #667eea; }
+.menu { flex: 1; padding: 1rem 0; overflow-y: auto; }
+.menu-item { margin: 0.25rem 1rem; }
+.menu-item-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #555;
+}
+.menu-item-header:hover { background: rgba(102,126,234,0.1); color: #667eea; }
+.menu-item-header.active { background: rgba(102,126,234,0.15); color: #667eea; }
+.menu-item-icon { font-size: 1.2rem; margin-right: 0.75rem; }
+.submenu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+.submenu.expanded { max-height: 400px; }
+.submenu-item {
+  display: block;
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  color: #666;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  margin: 0.125rem 0.5rem;
+  font-size: 0.9rem;
+}
+.submenu-item:hover { background: rgba(102,126,234,0.15); color: #667eea; }
+.submenu-item.active { background: rgba(102,126,234,0.2); color: #667eea; font-weight: 500; }
+.sidebar-footer { padding: 1.5rem; border-top: 1px solid rgba(0,0,0,0.1); }
+.user-info { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: rgba(102,126,234,0.1); border-radius: 8px; }
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg,#667eea,#764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.main-content { flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+.content-header { padding: 2rem; background: rgba(255,255,255,0.95); border-bottom: 1px solid rgba(255,255,255,0.2); }
+.content-title { font-size: 2rem; font-weight: 700; color: #333; margin-bottom: 0.5rem; }
+.content-subtitle { color: #666; font-size: 1.1rem; }
+.content-body { flex: 1; padding: 2rem; overflow-y: auto; }
+.card { background: rgba(255,255,255,0.95); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+.loading { padding: 2rem; text-align: center; color: #666; }
+.error { background: rgba(239,68,68,0.1); color: #DC2626; padding: 1rem; border-radius: 8px; margin: 1rem 0; }

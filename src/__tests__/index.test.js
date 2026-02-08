@@ -67,7 +67,8 @@ const mockWorker = {
                   subItems: [
                     { id: 'sub3-1', label: 'Custom Reports', path: '/reports/custom' },
                     { id: 'sub3-2', label: 'Scheduled Reports', path: '/reports/scheduled' },
-                    { id: 'sub3-3', label: 'Data Exports', path: '/reports/exports' }
+                    { id: 'sub3-3', label: 'Data Exports', path: '/reports/exports' },
+                    { id: 'sub3-4', label: 'Manage TLS Auto Pilot Lists', path: '/reports/tls-autopilot' }
                   ]
                 }
               ]
@@ -101,6 +102,14 @@ const mockWorker = {
             }), {
               headers: {
                 'Content-Type': 'application/json',
+                ...corsHeaders
+              }
+            });
+
+          case '/reports/tls-autopilot':
+            return new Response('<!DOCTYPE html><html><head><title>Manage TLS Auto Pilot Lists</title></head><body><div class="content">TLS Auto Pilot</div></body></html>', {
+              headers: {
+                'Content-Type': 'text/html',
                 ...corsHeaders
               }
             });
@@ -196,6 +205,16 @@ describe('CF-Analyst Worker', () => {
     expect(response.status).toBe(404);
     const data = await response.json();
     expect(data.error).toBe('Not Found');
+  });
+
+  test('should serve TLS Auto Pilot page', async () => {
+    const request = new Request('https://example.com/reports/tls-autopilot');
+    const response = await mockWorker.default.fetch(request);
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('Manage TLS Auto Pilot Lists');
+    expect(html).toContain('TLS Auto Pilot');
   });
 
   test('should handle CORS preflight', async () => {
