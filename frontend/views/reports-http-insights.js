@@ -1,6 +1,6 @@
 /**
- * HTTP Insights - Stacked bar chart of Gateway L7 HTTP status codes (hourly, 48h).
- * Filter by status code; show hostname breakdown for selected code.
+ * HTTP Insights - Stacked bar chart of Gateway L7 HTTP status codes (hourly, 24h).
+ * Filter by status code; show hostname breakdown for selected code and time bin.
  */
 const STATUS_COLORS = {
   200: '#22c55e',
@@ -55,8 +55,8 @@ export default async function render({ api }) {
   const apiFn = api();
   const html = `
     <div class="card">
-      <h2 class="card-title">HTTP status codes (last 48 hours, hourly)</h2>
-      <p style="margin-bottom: 1rem; color: #666;">Gateway L7 request counts by status code. Click a code in the legend to see hostname breakdown.</p>
+      <h2 class="card-title">HTTP status codes (last 24 hours, hourly)</h2>
+      <p style="margin-bottom: 1rem; color: #666;">Gateway L7 request counts by status code. Click a bar segment to see hostname breakdown for that hour; click a hostname for request details.</p>
       <div id="httpInsightsChart" style="min-height: 280px; position: relative; padding-top: 1.5rem;"></div>
       <div id="httpInsightsLegend" style="margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
     </div>
@@ -89,11 +89,19 @@ function initHttpInsights(apiFn) {
   let chartData = [];
   let activeDetailCode = null;
   let activeDetailHost = null;
+  let activeDetailHour = null;
 
   function buildTimeRange() {
     const end = new Date();
     const start = new Date(end);
-    start.setHours(start.getHours() - 48);
+    start.setHours(start.getHours() - 24);
+    return { datetime_geq: start.toISOString(), datetime_leq: end.toISOString() };
+  }
+
+  function buildHourRange(hourIso) {
+    if (!hourIso) return buildTimeRange();
+    const start = new Date(hourIso);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
     return { datetime_geq: start.toISOString(), datetime_leq: end.toISOString() };
   }
 
@@ -105,8 +113,8 @@ function initHttpInsights(apiFn) {
     return res.data || [];
   }
 
-  async function fetchHosts(statusCode) {
-    const { datetime_geq, datetime_leq } = buildTimeRange();
+  async function fetchHosts(statusCode, hourIso) {
+    const { datetime_geq, datetime_leq } = buildHourRange(hourIso);
     const params = new URLSearchParams({
       type: 'hosts',
       statusCode: String(statusCode),
@@ -118,8 +126,8 @@ function initHttpInsights(apiFn) {
     return res.data || [];
   }
 
-  async function fetchRequestDetails(statusCode, httpHost) {
-    const { datetime_geq, datetime_leq } = buildTimeRange();
+  async function fetchRequestDetails(statusCode, httpHost, hourIso) {
+    const { datetime_geq, datetime_leq } = buildHourRange(hourIso);
     const params = new URLSearchParams({
       type: 'details',
       statusCode: String(statusCode),
@@ -168,7 +176,7 @@ function initHttpInsights(apiFn) {
       </span>
     `).join('');
     legendEl.querySelectorAll('.http-insights-legend-item').forEach(el => {
-      el.addEventListener('click', () => showHostDetails(parseInt(el.dataset.code, 10)));
+      el.addEventListener('click', () => showHostDetails(parseInt(el.dataset.code, 10), null));
     });
   }
 
@@ -231,21 +239,26 @@ function initHttpInsights(apiFn) {
     `;
 
     chartEl.querySelectorAll('.http-insights-segment').forEach(el => {
-      el.addEventListener('click', () => showHostDetails(parseInt(el.dataset.code, 10)));
+      el.addEventListener('click', () => {
+        const bar = el.closest('.http-insights-bar');
+        const hour = bar ? bar.dataset.hour : null;
+        showHostDetails(parseInt(el.dataset.code, 10), hour);
+      });
     });
 
     renderLegend(codes);
   }
 
-  async function showHostDetails(code) {
+  async function showHostDetails(code, hourIso) {
     activeDetailCode = code;
-    detailsCodeEl.textContent = statusDescription(code);
+    activeDetailHour = hourIso;
+    detailsCodeEl.textContent = statusDescription(code) + (hourIso ? ` (${formatHourRange(hourIso)})` : '');
     detailsEl.style.display = 'block';
     requestDetailsEl.style.display = 'none';
     hostsEl.innerHTML = '<div class="loading">Loading hostname breakdown...</div>';
 
     try {
-      const rows = await fetchHosts(code);
+      const rows = await fetchHosts(code, hourIso);
       if (rows.length === 0) {
         hostsEl.innerHTML = '<p style="color:#666">No hostname data for this status code.</p>';
         return;
@@ -266,22 +279,22 @@ function initHttpInsights(apiFn) {
         </table>
       `;
       hostsEl.querySelectorAll('.http-insights-host-row').forEach(row => {
-        row.addEventListener('click', () => showRequestDetails(code, row.dataset.host));
+        row.addEventListener('click', () => showRequestDetails(code, row.dataset.host, activeDetailHour));
       });
     } catch (e) {
       hostsEl.innerHTML = '<div class="error">' + escapeHtml(e.message) + '</div>';
     }
   }
 
-  async function showRequestDetails(code, host) {
+  async function showRequestDetails(code, host, hourIso) {
     activeDetailHost = host;
-    detailsHostnameEl.textContent = host;
+    detailsHostnameEl.textContent = host + (hourIso ? ` (${formatHourRange(hourIso)})` : '');
     requestDetailsEl.style.display = 'block';
     requestRowsEl.innerHTML = '<div class="loading">Loading request details...</div>';
     requestDetailsEl.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      const rows = await fetchRequestDetails(code, host);
+      const rows = await fetchRequestDetails(code, host, hourIso);
       if (rows.length === 0) {
         requestRowsEl.innerHTML = '<p style="color:#666">No request details for this hostname.</p>';
         return;
@@ -332,7 +345,7 @@ function initHttpInsights(apiFn) {
       const codes = getAllCodes(chartData);
       renderChart();
       if (codes.length === 0) {
-        chartEl.innerHTML = '<div style="padding: 2rem; color: #666;">No Gateway L7 data for the last 48 hours. Ensure Gateway proxy is configured and Analytics is enabled.</div>';
+        chartEl.innerHTML = '<div style="padding: 2rem; color: #666;">No Gateway L7 data for the last 24 hours. Ensure Gateway proxy is configured and Analytics is enabled.</div>';
       }
     } catch (e) {
       chartEl.innerHTML = '<div class="error">' + escapeHtml(e.message) + '</div>';

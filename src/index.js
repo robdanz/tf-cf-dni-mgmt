@@ -723,7 +723,7 @@ async function handleHttpInsights(request, corsHeaders, env) {
   const now = new Date();
   const end = new Date(now);
   const start = new Date(now);
-  start.setHours(start.getHours() - 48);
+  start.setHours(start.getHours() - 24);
   const defaultGeq = start.toISOString();
   const defaultLeq = end.toISOString();
   const geq = datetimeGeq || defaultGeq;
