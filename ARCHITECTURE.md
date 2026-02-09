@@ -33,7 +33,7 @@ cf-analyst/
 | Environment | Frontend (Pages)              | API (Worker)                         |
 |-------------|-------------------------------|--------------------------------------|
 | Local dev   | http://localhost:8788         | http://localhost:8787                |
-| Production  | https://cf-analyst.pages.dev  | https://cf-analyst.&lt;subdomain&gt;.workers.dev |
+| Production  | https://cf-analyst.pages.dev  | https://cf-analyst.rob-danz.workers.dev |
 
 ## Custom Domain (optional)
 

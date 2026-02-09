@@ -70,6 +70,18 @@ npx wrangler deploy --env staging
 ./scripts/manage-secrets.sh put SECRET_NAME staging
 ```
 
+## API Token Permissions (TLS Auto Pilot + Domain Categorization)
+
+The `CLOUDFLARE_API_TOKEN` must include:
+- **Account > Zero Trust** (or Gateway Edit) – for Gateway lists
+- **Account > Intel > Read** – for domain categorization (Radar/Intel API)
+
+Without Intel Read, domain categorization shows "No categorization". To verify:
+```bash
+./scripts/test-intel-domain.sh
+```
+If you see "Authentication error", add Intel Read in Dashboard → My Profile → API Tokens → Edit token → Permissions.
+
 ## Understanding Worker Creation
 
 The worker in Cloudflare is created based on the `name` field in your `wrangler.toml`:
@@ -89,10 +101,10 @@ When you run `wrangler deploy`, it:
 Based on your `wrangler.toml`:
 
 - **Production worker**: `cf-analyst`
-  - Will be created at: `https://cf-analyst.your-subdomain.workers.dev`
+  - Will be created at: `https://cf-analyst.rob-danz.workers.dev`
   
 - **Staging worker**: `cf-analyst-staging`
-  - Will be created at: `https://cf-analyst-staging.your-subdomain.workers.dev`
+  - Will be created at: `https://cf-analyst-staging.rob-danz.workers.dev`
 
 ## Checking if Worker Exists
 

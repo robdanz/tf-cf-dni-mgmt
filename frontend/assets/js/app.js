@@ -6,10 +6,11 @@
   const API = config.apiBase;
 
   const routes = {
-    '/': { view: 'views/home.js', title: 'Cloudflare Analyst', subtitle: 'Cloudflare One visual utilities' },
+    '/': { view: 'views/home.js', title: 'CF1 Cockpit', subtitle: 'Cloudflare One visual utilities' },
     '/analytics/traffic': { view: 'views/analytics-traffic.js', title: 'Web Analytics', subtitle: 'Traffic overview' },
     '/analytics/performance': { view: 'views/analytics-performance.js', title: 'Network Analytics', subtitle: 'Performance metrics' },
     '/reports/tls-autopilot': { view: 'views/reports-tls-autopilot.js', title: 'Manage TLS Auto Pilot Lists', subtitle: 'Assign list roles and move hostnames' },
+    '/reports/http-insights': { view: 'views/reports-http-insights.js', title: 'HTTP Insights', subtitle: 'Gateway L7 status codes and hostname breakdown' },
   };
 
   async function api(path) {

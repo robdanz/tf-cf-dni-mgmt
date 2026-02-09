@@ -1,5 +1,5 @@
 /**
- * Cloudflare Analyst - Modern Web App UI
+ * CF1 Cockpit - Modern Web App UI
  * Main worker entry point with authentication and routing
  */
 
@@ -51,18 +51,19 @@ export default {
           });
 
         case '/api/gateway/lists':
-          return new Response(JSON.stringify({ lists: [], error: 'Add Gateway lists API implementation' }), {
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
+          return handleGatewayLists(request, corsHeaders, env);
 
         case '/api/gateway/lists/move':
-          if (request.method !== 'POST') {
-            return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-          }
-          return new Response(JSON.stringify({ error: 'Add Gateway list move API implementation' }), {
-            status: 501,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
+          return handleGatewayListMove(request, corsHeaders, env);
+
+        case '/api/intel/domain':
+          return handleIntelDomain(request, corsHeaders, env);
+
+        case '/api/http-insights':
+          return handleHttpInsights(request, corsHeaders, env);
+
+        case '/api/gateway/rules':
+          return handleGatewayRules(request, corsHeaders, env);
 
         case '/health':
           return new Response(JSON.stringify({
@@ -273,18 +274,7 @@ function getMenuData() {
         icon: '📊',
         subItems: [
           { id: 'sub1-1', label: 'Traffic Overview', path: '/analytics/traffic' },
-          { id: 'sub1-2', label: 'Performance Metrics', path: '/analytics/performance' },
-          { id: 'sub1-3', label: 'Security Events', path: '/analytics/security' }
-        ]
-      },
-      {
-        id: 'item2',
-        label: 'GraphQL Explorer',
-        icon: '🔍',
-        subItems: [
-          { id: 'sub2-1', label: 'Query Builder', path: '/graphql/builder' },
-          { id: 'sub2-2', label: 'Schema Explorer', path: '/graphql/schema' },
-          { id: 'sub2-3', label: 'Query History', path: '/graphql/history' }
+          { id: 'sub1-2', label: 'Performance Metrics', path: '/analytics/performance' }
         ]
       },
       {
@@ -292,13 +282,590 @@ function getMenuData() {
         label: 'Reports & Insights',
         icon: '📈',
         subItems: [
-          { id: 'sub3-1', label: 'Custom Reports', path: '/reports/custom' },
-          { id: 'sub3-2', label: 'Scheduled Reports', path: '/reports/scheduled' },
-          { id: 'sub3-3', label: 'Data Exports', path: '/reports/exports' }
+          { id: 'sub3-1', label: 'HTTP Insights', path: '/reports/http-insights' }
+        ]
+      },
+      {
+        id: 'item4',
+        label: 'Admin Tools',
+        icon: '⚙️',
+        subItems: [
+          { id: 'sub4-1', label: 'TLS Auto Pilot List Manager', path: '/reports/tls-autopilot' }
         ]
       }
     ]
   };
+}
+
+/**
+ * Fetch hostname-based Zero Trust Gateway lists from Cloudflare API
+ */
+async function handleGatewayLists(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      lists: []
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`,
+      { headers: { 'Authorization': 'Bearer ' + apiToken } }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gateway API error ${response.status}: ${errText}`);
+    }
+
+    const result = await response.json();
+    if (!result.success && result.errors?.length) {
+      throw new Error(result.errors.map(e => e.message || e).join('; '));
+    }
+    let allLists = result.result || [];
+    if (Array.isArray(result.result) === false && result.result && typeof result.result === 'object') {
+      allLists = result.result.result || result.result.lists || [result.result] || [];
+    }
+
+    // Include hostname/domain lists (used for hostnames), exclude IP and URL
+    const typeLower = (t) => String(t || '').toLowerCase();
+    const excluded = ['ip', 'url'];
+    const hostnameLists = allLists.filter(l => {
+      const t = typeLower(l.type);
+      if (excluded.includes(t)) return false;
+      return t === 'host' || t === 'hosts' || t === 'hostname' || t === 'domain' || t.includes('host') || t.includes('domain');
+    });
+    const listsToFetch = hostnameLists;
+
+    // Fetch items for each list
+    const listsWithItems = await Promise.all(
+      listsToFetch.map(async (list) => {
+        const detailRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists/${list.id}`,
+          { headers: { 'Authorization': 'Bearer ' + apiToken } }
+        );
+        if (!detailRes.ok) return { ...list, items: [] };
+        const detail = await detailRes.json();
+        const items = (detail.result?.items || []).map(i => ({
+          id: i.id || i.value,
+          value: i.value || i.hostname || '',
+          comment: i.comment || i.description || ''
+        }));
+        return { ...list, items };
+      })
+    );
+
+    const debugMsg = allLists.length === 0
+      ? 'API returned no lists; check Zero Trust Gateway lists exist'
+      : hostnameLists.length === 0
+        ? 'No hostname-type lists found. Types seen: ' + [...new Set(allLists.map(l => l.type || '(unknown)'))].join(', ')
+        : undefined;
+
+    return new Response(JSON.stringify({
+      lists: listsWithItems,
+      debug: debugMsg
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Gateway lists error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      lists: [],
+      hint: 'Ensure API token has Zero Trust or Gateway Edit permission'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * Move hostname from TLS Hosts Bypass to Bypass or Block domain list.
+ * Extracts domain by removing leading label: test.example.com → example.com
+ */
+async function handleGatewayListMove(request, corsHeaders, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({ error: 'Missing Cloudflare API credentials' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const body = await request.json();
+    const { hostname, sourceListId, targetListId } = body;
+    if (!hostname || !sourceListId || !targetListId) {
+      return new Response(JSON.stringify({
+        error: 'hostname, sourceListId, and targetListId are required'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const domain = hostnameToDomain(hostname);
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`;
+    const headers = {
+      'Authorization': 'Bearer ' + apiToken,
+      'Content-Type': 'application/json'
+    };
+
+    // Get source list and identify hostnames to remove (all matching this domain)
+    const srcRes = await fetch(`${base}/${sourceListId}`, { headers });
+    if (!srcRes.ok) throw new Error('Failed to fetch source list');
+    const srcData = await srcRes.json();
+    const srcList = srcData.result;
+    const allItems = srcList?.items || [];
+    const domainLower = domain.toLowerCase();
+    const toRemove = allItems.filter(i => {
+      const v = (i.value || i.hostname || '').toLowerCase();
+      const itemDomain = hostnameToDomain(v).toLowerCase();
+      return itemDomain === domainLower;
+    });
+    const removedCount = toRemove.length;
+
+    // Get target list and add domain (avoid duplicates)
+    const tgtRes = await fetch(`${base}/${targetListId}`, { headers });
+    if (!tgtRes.ok) throw new Error('Failed to fetch target list');
+    const tgtData = await tgtRes.json();
+    const tgtList = tgtData.result;
+    const existingValues = new Set((tgtList?.items || []).map(i => (i.value || i.hostname || '').toLowerCase()));
+    const domainAlreadyInTarget = existingValues.has(domain.toLowerCase());
+
+    // Use PATCH remove/append (Gateway API expects remove as array of value strings)
+    const removeValues = toRemove.map(i => i.value || i.hostname || '').filter(Boolean);
+    const removeRes = removeValues.length > 0
+      ? await fetch(`${base}/${sourceListId}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ remove: removeValues })
+        })
+      : { ok: true };
+    const addRes = !domainAlreadyInTarget
+      ? await fetch(`${base}/${targetListId}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ append: [{ value: domain }] })
+        })
+      : { ok: true };
+
+    if (!removeRes.ok || !addRes.ok) {
+      const remErr = await removeRes.text();
+      const addErr = await addRes.text();
+      let errMsg = 'Update failed';
+      if (!removeRes.ok) errMsg += ' (source list): ' + parseApiError(remErr);
+      if (!addRes.ok) errMsg += (errMsg !== 'Update failed' ? '; ' : ' ') + '(target list): ' + parseApiError(addErr);
+      throw new Error(errMsg);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      hostname,
+      domain,
+      removedCount,
+      message: `Moved ${hostname} → ${domain} in target list`
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Gateway list move error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+function parseApiError(text) {
+  try {
+    const j = JSON.parse(text);
+    const msg = j.errors?.[0]?.message || j.message || text;
+    return typeof msg === 'string' ? msg.slice(0, 200) : String(msg).slice(0, 200);
+  } catch {
+    return String(text).slice(0, 200);
+  }
+}
+
+/**
+ * Convert hostname to domain by removing leading label.
+ * test.example.com → example.com, api.dev.example.com → dev.example.com
+ */
+function hostnameToDomain(hostname) {
+  const parts = String(hostname || '').split('.');
+  if (parts.length <= 2) return hostname;
+  return parts.slice(1).join('.');
+}
+
+/**
+ * Extract apex/registrable domain (eTLD+1) for fallback lookup.
+ * sub.example.com → example.com, api.dev.example.co.uk → example.co.uk (simplified)
+ */
+function domainToApex(domain) {
+  const parts = String(domain || '').split('.').filter(Boolean);
+  if (parts.length <= 2) return domain;
+  // Common multi-part TLDs; otherwise assume last 2 parts
+  const multiTlds = ['co.uk', 'com.au', 'co.jp', 'co.nz', 'co.za', 'com.br'];
+  const joined = parts.slice(-2).join('.');
+  for (const tld of multiTlds) {
+    if (domain.endsWith('.' + tld) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+  }
+  return parts.slice(-2).join('.');
+}
+
+/**
+ * Fetch Cloudflare Intel/Radar domain categorization.
+ * FQDN → drop host (first label) → query subdomain. If empty, fallback to apex.
+ * Uses Intel domain + domain-history APIs. Requires Intel Read permission.
+ */
+async function handleIntelDomain(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const url = new URL(request.url);
+  const domainParam = url.searchParams.get('domain');
+
+  if (!domainParam || !domainParam.trim()) {
+    return new Response(JSON.stringify({ error: 'domain query parameter required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      hint: 'Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to .dev.vars / secrets'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
+  const headers = { 'Authorization': 'Bearer ' + apiToken };
+
+  function extractCategories(d) {
+    const toNames = (arr) => (arr || []).map(c => (c && (c.name || c.label || String(c)))).filter(Boolean);
+    const contentCats = toNames(d.content_categories || d.contentCategories);
+    const securityCats = toNames(d.security_categories || d.securityCategories);
+    const app = d.application && (d.application.name || d.application.label || d.application);
+    const riskTypes = toNames(d.risk_types || d.riskTypes);
+    return { contentCats, securityCats, app, riskTypes };
+  }
+
+  function extractFromHistory(hist) {
+    const cats = [];
+    const items = Array.isArray(hist) ? hist : (hist?.result ? hist.result : []);
+    for (const h of items) {
+      const catz = h.categorizations || [];
+      for (const c of catz) {
+        const arr = c.categories || [];
+        for (const x of arr) cats.push(x.name || x);
+      }
+    }
+    return [...new Set(cats)];
+  }
+
+  async function fetchDomain(q) {
+    const r = await fetch(`${base}/intel/domain?domain=${encodeURIComponent(q)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j.success || !j.result) return null;
+    return j.result;
+  }
+
+  async function fetchDomainHistory(q) {
+    const r = await fetch(`${base}/intel/domain-history?domain=${encodeURIComponent(q)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j.success) return null;
+    return j;
+  }
+
+  try {
+    const domain = domainParam.trim();
+    let contentCats = [];
+    let securityCats = [];
+    let application = null;
+    let riskTypes = [];
+
+    // Radar categorizes at apex; subdomains inherit (e.g. gx.nvidia.com inherits from nvidia.com)
+    // Try apex first for multi-label domains
+    const apex = domainToApex(domain);
+    const tryApexFirst = apex !== domain;
+
+    async function tryDomain(q) {
+      let cats = { contentCats: [], securityCats: [], app: null, riskTypes: [] };
+      const d = await fetchDomain(q);
+      if (d) {
+        const ex = extractCategories(d);
+        cats = { contentCats: ex.contentCats, securityCats: ex.securityCats, app: ex.app, riskTypes: ex.riskTypes };
+      }
+      if (cats.contentCats.length === 0 && cats.securityCats.length === 0) {
+        const hist = await fetchDomainHistory(q);
+        const histCats = extractFromHistory(hist);
+        if (histCats.length) cats.contentCats = histCats;
+      }
+      return cats;
+    }
+
+    if (tryApexFirst) {
+      const apexCats = await tryDomain(apex);
+      if (apexCats.contentCats.length || apexCats.securityCats.length) {
+        contentCats = apexCats.contentCats;
+        securityCats = apexCats.securityCats;
+        application = apexCats.app;
+        riskTypes = apexCats.riskTypes;
+      }
+    }
+
+    if (contentCats.length === 0 && securityCats.length === 0) {
+      const subCats = await tryDomain(domain);
+      contentCats = subCats.contentCats;
+      securityCats = subCats.securityCats;
+      application = application || subCats.app;
+      riskTypes = riskTypes.length ? riskTypes : subCats.riskTypes;
+    }
+
+    if (contentCats.length === 0 && securityCats.length === 0 && tryApexFirst) {
+      // Last resort: apex domain-history
+      const hist = await fetchDomainHistory(apex);
+      const histCats = extractFromHistory(hist);
+      if (histCats.length) contentCats = histCats;
+    }
+
+    return new Response(JSON.stringify({
+      domain,
+      content_categories: contentCats,
+      security_categories: securityCats,
+      application,
+      risk_types: riskTypes
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Intel domain error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      hint: 'Ensure API token has Intel Read permission'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * HTTP Insights - Gateway L7 GraphQL proxy.
+ * GET /api/http-insights?type=chart&datetime_geq=...&datetime_leq=...&statusCodes=200,401,500
+ * GET /api/http-insights?type=hosts&statusCode=403&datetime_geq=...&datetime_leq=...
+ */
+async function handleHttpInsights(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      hint: 'Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || 'chart';
+  const datetimeGeq = url.searchParams.get('datetime_geq');
+  const datetimeLeq = url.searchParams.get('datetime_leq');
+  const statusCodesParam = url.searchParams.get('statusCodes');
+  const statusCodeParam = url.searchParams.get('statusCode');
+  const httpHostParam = url.searchParams.get('httpHost');
+
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setHours(start.getHours() - 48);
+  const defaultGeq = start.toISOString();
+  const defaultLeq = end.toISOString();
+  const geq = datetimeGeq || defaultGeq;
+  const leq = datetimeLeq || defaultLeq;
+
+  const filter = {
+    datetime_geq: geq,
+    datetime_leq: leq,
+    httpStatusCode_neq: 0
+  };
+
+  if (type === 'hosts' && statusCodeParam) {
+    const sc = parseInt(statusCodeParam, 10);
+    if (!isNaN(sc)) filter.httpStatusCode_in = [sc];
+  } else if (statusCodesParam) {
+    const arr = statusCodesParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+    if (arr.length) filter.httpStatusCode_in = arr;
+  }
+
+  if (type === 'details' && httpHostParam && statusCodeParam) {
+    filter.httpHost = httpHostParam.trim();
+    const sc = parseInt(statusCodeParam, 10);
+    if (!isNaN(sc)) filter.httpStatusCode_in = [sc];
+  }
+
+  let query;
+  if (type === 'details') {
+    query = `query HttpInsightsDetails($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [datetime_DESC]) {
+              count
+              dimensions { datetime url action email }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'hosts') {
+    query = `query HttpInsightsHosts($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 1000, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { httpHost }
+            }
+          }
+        }
+      }`;
+  } else {
+    query = `query HttpInsightsChart($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 2000, filter: $filter, orderBy: [datetimeHour_ASC]) {
+              count
+              dimensions { datetimeHour httpStatusCode }
+            }
+          }
+        }
+      }`;
+  }
+
+  try {
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query,
+        variables: { accountTag: accountId, filter }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GraphQL ${response.status}: ${text}`);
+    }
+
+    const json = await response.json();
+    if (json.errors?.length) {
+      throw new Error(json.errors.map(e => e.message || JSON.stringify(e)).join('; '));
+    }
+
+    const accounts = json?.data?.viewer?.accounts || [];
+    const groups = accounts[0]?.gatewayL7RequestsAdaptiveGroups || [];
+
+    return new Response(JSON.stringify({
+      data: groups,
+      filter: { datetime_geq: geq, datetime_leq: leq }
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('HTTP Insights error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      hint: 'Ensure API token has Analytics Read (Gateway) permission'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * Gateway rules - list Zero Trust Gateway rules for policy name lookup.
+ * GET /api/gateway/rules
+ */
+async function handleGatewayRules(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      rules: []
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/rules`,
+      { headers: { 'Authorization': 'Bearer ' + apiToken } }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Gateway rules API ${response.status}: ${text}`);
+    }
+
+    const result = await response.json();
+    if (!result.success && result.errors?.length) {
+      throw new Error(result.errors.map(e => e.message || e).join('; '));
+    }
+
+    const rules = result.result || [];
+    const policyMap = {};
+    for (const r of rules) {
+      if (r.id && r.name) policyMap[r.id] = r.name;
+    }
+
+    return new Response(JSON.stringify({
+      rules,
+      policyMap
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Gateway rules error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      rules: [],
+      policyMap: {}
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
 }
 
 /**
@@ -310,7 +877,7 @@ async function getMainPage() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare Analyst</title>
+    <title>CF1 Cockpit</title>
     <style>
         * {
             margin: 0;
@@ -320,7 +887,7 @@ async function getMainPage() {
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
             min-height: 100vh;
             color: #333;
         }
@@ -349,7 +916,7 @@ async function getMainPage() {
         .logo {
             font-size: 1.5rem;
             font-weight: 700;
-            color: #667eea;
+            color: #1e40af;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -381,13 +948,13 @@ async function getMainPage() {
         }
 
         .menu-item-header:hover {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
+            background: rgba(37, 99, 235, 0.1);
+            color: #1e40af;
         }
 
         .menu-item-header.active {
-            background: rgba(102, 126, 234, 0.15);
-            color: #667eea;
+            background: rgba(37, 99, 235, 0.15);
+            color: #1e40af;
         }
 
         .menu-item-icon {
@@ -435,13 +1002,13 @@ async function getMainPage() {
         }
 
         .submenu-item:hover {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
+            background: rgba(37, 99, 235, 0.1);
+            color: #1e40af;
         }
 
         .submenu-item.active {
-            background: rgba(102, 126, 234, 0.15);
-            color: #667eea;
+            background: rgba(37, 99, 235, 0.15);
+            color: #1e40af;
             font-weight: 500;
         }
 
@@ -456,7 +1023,7 @@ async function getMainPage() {
             align-items: center;
             gap: 0.75rem;
             padding: 0.75rem;
-            background: rgba(102, 126, 234, 0.1);
+            background: rgba(37, 99, 235, 0.1);
             border-radius: 8px;
         }
 
@@ -464,7 +1031,7 @@ async function getMainPage() {
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: linear-gradient(135deg, #1e3a5f, #2563eb);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -633,7 +1200,7 @@ async function getMainPage() {
             <div class="sidebar-header">
                 <div class="logo">
                     <span class="logo-icon">☁️</span>
-                    <span>Cloudflare Analyst</span>
+                    <span>CF1 Cockpit</span>
                 </div>
             </div>
 
@@ -655,7 +1222,7 @@ async function getMainPage() {
         <!-- Main Content -->
         <main class="main-content">
             <div class="content-header">
-                <h1 class="content-title">Welcome to Cloudflare Analyst</h1>
+                <h1 class="content-title">Welcome to CF1 Cockpit</h1>
                 <p class="content-subtitle">Your comprehensive analytics and insights platform</p>
             </div>
 
@@ -663,7 +1230,7 @@ async function getMainPage() {
                 <div class="welcome-card">
                     <h2 class="welcome-title">Getting Started</h2>
                     <p class="welcome-text">
-                        Cloudflare Analyst provides powerful tools for analyzing your Cloudflare data through intuitive visualizations and GraphQL queries. 
+                        CF1 Cockpit provides powerful tools for analyzing your Cloudflare data through intuitive visualizations. 
                         Use the sidebar menu to explore different sections and features.
                     </p>
 

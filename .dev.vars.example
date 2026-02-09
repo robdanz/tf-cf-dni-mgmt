@@ -1,0 +1,6 @@
+# Local development environment variables
+# Copy to .dev.vars and fill in your values. Never commit .dev.vars.
+#
+# Required for Gateway lists, Intel domain lookup, HTTP Insights:
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
+CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id

@@ -1,6 +1,10 @@
-# CF-Analyst
+# CF1 Cockpit (CF-Analyst)
 
-A Cloudflare Workers project for analytics and data processing.
+Cloudflare One dashboard with a Worker API and Pages frontend. Includes HTTP Insights, TLS Auto Pilot list management, and domain categorization via the Intel API.
+
+## Ready to push to GitHub?
+
+See [PUSH_README.md](PUSH_README.md) for pre-push checklist, GitHub Secrets setup, and post-deploy configuration (API URL, CORS).
 
 ## Project Structure
 

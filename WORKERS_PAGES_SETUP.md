@@ -55,11 +55,11 @@ npm run deploy:pages
 | Service | Local | Production |
 |---------|-------|------------|
 | Frontend (Pages) | http://localhost:8788 | https://cf-analyst.pages.dev |
-| API (Worker) | http://localhost:8787 | https://cf-analyst.&lt;subdomain&gt;.workers.dev |
+| API (Worker) | http://localhost:8787 | https://cf-analyst.rob-danz.workers.dev |
 
 ## Configure frontend for production API
 
-After deploying both, the frontend must know the Worker URL. In production it defaults to `https://cf-analyst.workers.dev`. If your Worker URL is different (e.g. `https://cf-analyst.your-subdomain.workers.dev`):
+After deploying both, the frontend must know the Worker URL. In production it defaults to `https://cf-analyst.workers.dev`. If your Worker URL is different (e.g. `https://cf-analyst.rob-danz.workers.dev`):
 
 1. Set `window.__CF_ANALYST_API__ = 'https://your-worker-url.workers.dev'` before loading the app, or
 2. Edit `frontend/assets/js/config.js` and set the production `apiBase`.

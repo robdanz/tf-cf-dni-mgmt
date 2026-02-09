@@ -30,7 +30,7 @@ const mockWorker = {
         // Route handling
         switch (url.pathname) {
           case '/':
-            return new Response('<!DOCTYPE html><html><head><title>Cloudflare Analyst</title></head><body><div class="sidebar">Test</div></body></html>', {
+            return new Response('<!DOCTYPE html><html><head><title>CF1 Cockpit</title></head><body><div class="sidebar">Test</div></body></html>', {
               headers: {
                 'Content-Type': 'text/html',
                 ...corsHeaders
@@ -66,8 +66,6 @@ const mockWorker = {
                   icon: '📈',
                   subItems: [
                     { id: 'sub3-1', label: 'Custom Reports', path: '/reports/custom' },
-                    { id: 'sub3-2', label: 'Scheduled Reports', path: '/reports/scheduled' },
-                    { id: 'sub3-3', label: 'Data Exports', path: '/reports/exports' },
                     { id: 'sub3-4', label: 'Manage TLS Auto Pilot Lists', path: '/reports/tls-autopilot' }
                   ]
                 }
@@ -160,7 +158,7 @@ describe('CF-Analyst Worker', () => {
     
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('Cloudflare Analyst');
+    expect(html).toContain('CF1 Cockpit');
     expect(html).toContain('sidebar');
   });
 
