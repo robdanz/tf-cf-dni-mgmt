@@ -14,7 +14,9 @@
   };
 
   async function api(path) {
-    const res = await fetch(API + path, { headers: { 'CF-Authorization': 'Bearer ' + (window.__authToken || '') } });
+    const opts = { credentials: 'include' };
+    if (window.__authToken) opts.headers = { 'CF-Authorization': 'Bearer ' + window.__authToken };
+    const res = await fetch(API + path, opts);
     if (!res.ok) throw new Error(res.statusText);
     return res.json();
   }
@@ -88,18 +90,23 @@
   }
 
   async function loadUser() {
+    const avatar = document.getElementById('userAvatar');
+    const name = document.getElementById('userName');
+    const email = document.getElementById('userEmail');
     try {
       const data = await api('/api/auth/validate');
       if (data.user) {
-        const avatar = document.getElementById('userAvatar');
-        const name = document.getElementById('userName');
-        const email = document.getElementById('userEmail');
-        if (avatar) avatar.textContent = (data.user.name || 'U').charAt(0).toUpperCase();
-        if (name) name.textContent = data.user.name || 'User';
+        if (avatar) avatar.textContent = (data.user.name || data.user.email || 'U').charAt(0).toUpperCase();
+        if (name) name.textContent = data.user.name || data.user.email?.split('@')[0] || 'User';
         if (email) email.textContent = data.user.email || '';
+      } else {
+        if (name) name.textContent = 'Not signed in';
+        if (email) email.textContent = '';
       }
     } catch (e) {
       console.error('Auth failed:', e);
+      if (name) name.textContent = 'Auth error';
+      if (email) email.textContent = '';
     }
   }
 

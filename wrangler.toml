@@ -6,6 +6,10 @@ compatibility_date = "2023-12-01"
 name = "cf-analyst"
 vars = { ENVIRONMENT = "production" }
 
+[[env.production.routes]]
+pattern = "cf-analyst.tancow.net"
+custom_domain = true
+
 [env.staging]
 name = "cf-analyst-staging"
 vars = { ENVIRONMENT = "staging" }

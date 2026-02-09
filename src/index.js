@@ -7,24 +7,19 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
-    // Handle CORS preflight requests
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, CF-Authorization',
-        },
-      });
-    }
-
-    // Add CORS headers to all responses
+    const origin = request.headers.get('Origin') || '';
+    const allowedOrigins = ['https://cf-analyst.tancow.net', 'https://cf-analyst.pages.dev', 'http://localhost:8788', 'http://127.0.0.1:8788'];
+    const isAllowed = allowedOrigins.includes(origin) || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': isAllowed ? origin : '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, CF-Authorization',
+      ...(isAllowed && { 'Access-Control-Allow-Credentials': 'true' }),
     };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 200, headers: corsHeaders });
+    }
 
     try {
       // Route handling
@@ -77,15 +72,18 @@ export default {
           });
 
         default:
-          return new Response(JSON.stringify({
-            error: 'Not Found',
-            path: url.pathname
-          }), {
+          if (url.pathname.startsWith('/api/')) {
+            return new Response(JSON.stringify({ error: 'Not Found', path: url.pathname }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+          if (url.hostname === 'cf-analyst.tancow.net') {
+            return proxyToPages(request, url, corsHeaders);
+          }
+          return new Response(JSON.stringify({ error: 'Not Found', path: url.pathname }), {
             status: 404,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders
-            }
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
       }
     } catch (error) {
@@ -102,6 +100,28 @@ export default {
     }
   },
 };
+
+const PAGES_ORIGIN = 'https://cf-analyst.pages.dev';
+
+async function proxyToPages(request, url, corsHeaders) {
+  const targetUrl = PAGES_ORIGIN + url.pathname + url.search;
+  const headers = new Headers(request.headers);
+  headers.set('Host', new URL(PAGES_ORIGIN).host);
+  const proxyRequest = new Request(targetUrl, {
+    method: request.method,
+    headers,
+    body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+  });
+  const response = await fetch(proxyRequest);
+  const outHeaders = new Headers(response.headers);
+  outHeaders.delete('content-encoding');
+  if (!outHeaders.has('Cache-Control')) outHeaders.set('Cache-Control', 'public, max-age=60');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: outHeaders,
+  });
+}
 
 /**
  * Validate Cloudflare Access token and extract user email
@@ -130,25 +150,25 @@ async function handleAuthValidation(request, corsHeaders) {
       });
     }
     
-    // Check for CF_Authorization cookie (set by Cloudflare Access)
-    const cookieHeader = request.headers.get('Cookie') || '';
-    let token = null;
+    // 1. Cf-Access-Jwt-Assertion: injected by Cloudflare when Access protects the Worker
+    // 2. CF_Authorization cookie: set by Access when user visits protected app
+    // 3. CF-Authorization header: manual Bearer token (e.g. from frontend passing cookie value)
+    let token = request.headers.get('Cf-Access-Jwt-Assertion') || request.headers.get('cf-access-jwt-assertion');
     
-    // Extract CF_Authorization cookie value
-    const cookies = cookieHeader.split(';').map(c => c.trim());
-    for (const cookie of cookies) {
-      if (cookie.startsWith('CF_Authorization=')) {
-        token = cookie.substring('CF_Authorization='.length);
-        break;
+    if (!token) {
+      const cookieHeader = request.headers.get('Cookie') || '';
+      const cookies = cookieHeader.split(';').map(c => c.trim());
+      for (const cookie of cookies) {
+        if (cookie.startsWith('CF_Authorization=')) {
+          token = cookie.substring('CF_Authorization='.length);
+          break;
+        }
       }
     }
     
-    // Fallback: Check for CF-Authorization header
     if (!token) {
       const authHeader = request.headers.get('CF-Authorization');
-      if (authHeader) {
-        token = authHeader.replace('Bearer ', '');
-      }
+      if (authHeader) token = authHeader.replace(/^Bearer\s+/i, '').trim();
     }
     
     if (!token) {
@@ -251,8 +271,8 @@ async function validateCloudflareToken(token) {
 
     return {
       email: email,
-      name: claims.name || claims.preferred_username || email.split('@')[0],
-      groups: claims.groups || [],
+      name: claims.name || claims.common_name || claims.preferred_username || claims.given_name || email.split('@')[0],
+      groups: claims.groups || claims['custom:groups'] || [],
       claims: claims
     };
 

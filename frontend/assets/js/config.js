@@ -11,6 +11,8 @@
   let apiBase = 'https://cf-analyst.rob-danz.workers.dev';
   if (isLocal) {
     apiBase = 'http://localhost:8787';
+  } else if (host === 'cf-analyst.tancow.net') {
+    apiBase = '';
   } else {
     if (typeof document !== 'undefined') {
       const meta = document.querySelector('meta[name="cf-analyst-api-base"]');
