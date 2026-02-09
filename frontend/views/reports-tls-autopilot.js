@@ -42,13 +42,7 @@ export default async function render({ api }) {
   return html;
 }
 
-function hostnameToDomain(hostname) {
-  const parts = String(hostname || '').split('.');
-  if (parts.length <= 2) return hostname;
-  return parts.slice(1).join('.');
-}
-
-function showMoveDialog(success, message, targetLabel, removedCount) {
+function showMoveDialog(success, message, targetLabel, removedCount, isRemove) {
   const overlay = document.createElement('div');
   overlay.id = 'moveDialogOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;';
@@ -58,7 +52,9 @@ function showMoveDialog(success, message, targetLabel, removedCount) {
   box.style.background = success ? '#f0fdf4' : '#fef2f2';
   box.style.borderLeft = '4px solid ' + color;
   let text = message;
-  if (success && typeof removedCount === 'number') {
+  if (success && isRemove) {
+    text = 'Entry removed from the autopilot list.';
+  } else if (success && typeof removedCount === 'number') {
     const listName = (targetLabel || 'bypass') === 'block' ? 'block' : 'bypass';
     text = 'Domain moved to ' + listName + ' list. ' + removedCount + ' matching hostname' + (removedCount === 1 ? ' has' : 's have') + ' been removed from the autopilot list.';
   }
@@ -122,35 +118,36 @@ function initTlsAutopilot(lists) {
     }
     const bypassId = document.getElementById('bypassList')?.value;
     const blockId = document.getElementById('blockList')?.value;
+    const sourceId = document.getElementById('autopilotList')?.value;
     container.innerHTML = '<div style="display:flex;flex-direction:column;gap:0.5rem;">' +
       list.items.map(item => {
         const v = (item.value || item.hostname || '').replace(/"/g, '&quot;');
         const esc = v.replace(/'/g, "\\'");
-        const domain = hostnameToDomain(v);
-        return '<div class="hostname-row" data-host="' + esc + '" data-domain="' + domain.replace(/"/g, '&quot;') + '" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.75rem;background:#f8f9fa;border-radius:8px;">' +
+        return '<div class="hostname-row" data-host="' + esc + '" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.75rem;background:#f8f9fa;border-radius:8px;">' +
           '<div style="display:flex;flex-direction:column;gap:0.25rem;">' +
             '<span style="font-family:monospace">' + v + '</span>' +
-            '<span class="domain-cat" data-domain="' + domain.replace(/"/g, '&quot;') + '" style="font-size:0.75rem;color:#666;">Loading categorization…</span>' +
+            '<span class="domain-cat" data-host="' + esc + '" style="font-size:0.75rem;color:#666;">Loading categorization…</span>' +
           '</div>' +
           '<div style="display:flex;gap:0.5rem;">' +
             (bypassId ? '<button data-action="move" data-host="' + esc + '" data-target="' + bypassId + '" data-target-label="bypass" style="padding:0.4rem 0.75rem;background:#10B981;color:white;border:none;border-radius:6px;cursor:pointer">To Bypass</button>' : '') +
             (blockId ? '<button data-action="move" data-host="' + esc + '" data-target="' + blockId + '" data-target-label="block" style="padding:0.4rem 0.75rem;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer">To Block</button>' : '') +
+            (sourceId ? '<button data-action="remove" data-host="' + esc + '" data-list="' + sourceId + '" style="padding:0.4rem 0.75rem;background:#6B7280;color:white;border:none;border-radius:6px;cursor:pointer">Remove</button>' : '') +
           '</div></div>';
       }).join('') + '</div>';
 
-    // Fetch Cloudflare Intel categorization for each unique domain
-    const domains = [...new Set(list.items.map(i => hostnameToDomain(i.value || i.hostname || '')))];
+    // Fetch Cloudflare Intel categorization for each unique hostname (backend extracts registrable domain)
+    const hostnames = [...new Set(list.items.map(i => (i.value || i.hostname || '').trim()).filter(Boolean))];
     const catCache = {};
-    Promise.all(domains.map(async (d) => {
+    Promise.all(hostnames.map(async (h) => {
       try {
-        const res = await fetch(apiBase + '/api/intel/domain?domain=' + encodeURIComponent(d));
+        const res = await fetch(apiBase + '/api/intel/domain?domain=' + encodeURIComponent(h));
         const data = await res.json();
-        if (!data.error) catCache[d] = data;
+        if (!data.error) catCache[h] = data;
       } catch (_) {}
     })).then(() => {
       container.querySelectorAll('.domain-cat').forEach(el => {
-        const d = el.getAttribute('data-domain');
-        const data = catCache[d];
+        const h = el.getAttribute('data-host')?.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+        const data = catCache[h];
         if (data) {
           const parts = [];
           if ((data.content_categories || []).length) parts.push('Content: ' + data.content_categories.join(', '));
@@ -168,7 +165,7 @@ function initTlsAutopilot(lists) {
 
     container.querySelectorAll('[data-action="move"]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const hostname = btn.getAttribute('data-host')?.replace(/\\'/g, "'");
+        const hostname = btn.getAttribute('data-host')?.replace(/&quot;/g, '"').replace(/\\'/g, "'");
         const targetId = btn.getAttribute('data-target');
         const targetLabel = btn.getAttribute('data-target-label') || 'bypass';
         const sourceId = document.getElementById('autopilotList')?.value;
@@ -189,6 +186,31 @@ function initTlsAutopilot(lists) {
           loadHostnames(sourceId);
         } catch (e) {
           showMoveDialog(false, e.message, targetLabel);
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-action="remove"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const value = btn.getAttribute('data-host')?.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+        const listId = btn.getAttribute('data-list');
+        if (!listId) {
+          showMoveDialog(false, 'Select Auto Pilot list first.', null, null, true);
+          return;
+        }
+        try {
+          const res = await fetch(apiBase + '/api/gateway/lists/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listId, value })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          showMoveDialog(true, '', null, null, true);
+          await refetchLists();
+          loadHostnames(listId);
+        } catch (e) {
+          showMoveDialog(false, e.message, null, null, true);
         }
       });
     });

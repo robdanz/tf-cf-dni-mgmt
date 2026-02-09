@@ -3,6 +3,8 @@
  * Main worker entry point with authentication and routing
  */
 
+import psl from 'psl';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -50,6 +52,9 @@ export default {
 
         case '/api/gateway/lists/move':
           return handleGatewayListMove(request, corsHeaders, env);
+
+        case '/api/gateway/lists/remove':
+          return handleGatewayListRemove(request, corsHeaders, env);
 
         case '/api/intel/domain':
           return handleIntelDomain(request, corsHeaders, env);
@@ -451,7 +456,16 @@ async function handleGatewayListMove(request, corsHeaders, env) {
       });
     }
 
-    const domain = hostnameToDomain(hostname);
+    const domain = getRegistrableDomain(hostname);
+    if (!domain) {
+      return new Response(JSON.stringify({
+        error: 'Could not extract registrable domain from hostname',
+        hint: 'Hostname may be an IP, invalid, or single-label. Use Remove to delete without moving.'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
     const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`;
     const headers = {
       'Authorization': 'Bearer ' + apiToken,
@@ -467,8 +481,8 @@ async function handleGatewayListMove(request, corsHeaders, env) {
     const domainLower = domain.toLowerCase();
     const toRemove = allItems.filter(i => {
       const v = (i.value || i.hostname || '').toLowerCase();
-      const itemDomain = hostnameToDomain(v).toLowerCase();
-      return itemDomain === domainLower;
+      const itemDomain = getRegistrableDomain(v);
+      return itemDomain && itemDomain.toLowerCase() === domainLower;
     });
     const removedCount = toRemove.length;
 
@@ -524,6 +538,72 @@ async function handleGatewayListMove(request, corsHeaders, env) {
   }
 }
 
+/**
+ * Remove a single entry from a Gateway list by exact value.
+ * No domain extraction; removes only the matching list item.
+ */
+async function handleGatewayListRemove(request, corsHeaders, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({ error: 'Missing Cloudflare API credentials' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const body = await request.json();
+    const { listId, value } = body;
+    if (!listId || value == null || value === '') {
+      return new Response(JSON.stringify({
+        error: 'listId and value are required'
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`;
+    const headers = {
+      'Authorization': 'Bearer ' + apiToken,
+      'Content-Type': 'application/json'
+    };
+
+    const removeRes = await fetch(`${base}/${listId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ remove: [String(value).trim()] })
+    });
+
+    if (!removeRes.ok) {
+      const errText = await removeRes.text();
+      throw new Error('Failed to remove entry: ' + parseApiError(errText));
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      removed: String(value).trim(),
+      message: 'Entry removed from list'
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Gateway list remove error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
 function parseApiError(text) {
   try {
     const j = JSON.parse(text);
@@ -535,31 +615,19 @@ function parseApiError(text) {
 }
 
 /**
- * Convert hostname to domain by removing leading label.
- * test.example.com → example.com, api.dev.example.com → dev.example.com
+ * Extract registrable domain (eTLD+1) using Public Suffix List.
+ * www.example.com → example.com, example.co.uk → example.co.uk (not co.uk)
+ * Returns null for IPs, invalid hostnames, or when extraction fails.
  */
-function hostnameToDomain(hostname) {
-  const parts = String(hostname || '').split('.');
-  if (parts.length <= 2) return hostname;
-  return parts.slice(1).join('.');
-}
-
-/**
- * Extract apex/registrable domain (eTLD+1) for fallback lookup.
- * sub.example.com → example.com, api.dev.example.co.uk → example.co.uk (simplified)
- */
-function domainToApex(domain) {
-  const parts = String(domain || '').split('.').filter(Boolean);
-  if (parts.length <= 2) return domain;
-  // Common multi-part TLDs; otherwise assume last 2 parts
-  const multiTlds = ['co.uk', 'com.au', 'co.jp', 'co.nz', 'co.za', 'com.br'];
-  const joined = parts.slice(-2).join('.');
-  for (const tld of multiTlds) {
-    if (domain.endsWith('.' + tld) && parts.length >= 3) {
-      return parts.slice(-3).join('.');
-    }
+function getRegistrableDomain(hostname) {
+  const s = String(hostname || '').trim();
+  if (!s) return null;
+  try {
+    const result = psl.get(s);
+    return result || null;
+  } catch {
+    return null;
   }
-  return parts.slice(-2).join('.');
 }
 
 /**
@@ -640,7 +708,7 @@ async function handleIntelDomain(request, corsHeaders, env) {
 
     // Radar categorizes at apex; subdomains inherit (e.g. gx.nvidia.com inherits from nvidia.com)
     // Try apex first for multi-label domains
-    const apex = domainToApex(domain);
+    const apex = getRegistrableDomain(domain) || domain;
     const tryApexFirst = apex !== domain;
 
     async function tryDomain(q) {
