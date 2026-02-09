@@ -57,6 +57,15 @@ export default {
         case '/api/http-insights':
           return handleHttpInsights(request, corsHeaders, env);
 
+        case '/api/user-insights':
+          return handleUserInsights(request, corsHeaders, env);
+
+        case '/api/network-insights':
+          return handleNetworkInsights(request, corsHeaders, env);
+
+        case '/api/dns-insights':
+          return handleDnsInsights(request, corsHeaders, env);
+
         case '/api/gateway/rules':
           return handleGatewayRules(request, corsHeaders, env);
 
@@ -302,7 +311,9 @@ function getMenuData() {
         label: 'Reports & Insights',
         icon: '📈',
         subItems: [
-          { id: 'sub3-1', label: 'HTTP Insights', path: '/reports/http-insights' }
+          { id: 'sub3-1', label: 'HTTP Insights', path: '/reports/http-insights' },
+          { id: 'sub3-2', label: 'DNS Insights', path: '/reports/dns-insights' },
+          { id: 'sub3-3', label: 'User Insights', path: '/reports/user-insights' }
         ]
       },
       {
@@ -822,6 +833,447 @@ async function handleHttpInsights(request, corsHeaders, env) {
     return new Response(JSON.stringify({
       error: error.message,
       hint: 'Ensure API token has Analytics Read (Gateway) permission'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * User Insights - L7 Gateway traffic by user (email).
+ * GET /api/user-insights?type=emails&datetime_geq=...&datetime_leq=...
+ * GET /api/user-insights?type=chart&email=...&datetime_geq=...&datetime_leq=...
+ * GET /api/user-insights?type=hosts&email=...&datetime_geq=...&datetime_leq=...
+ * GET /api/user-insights?type=details&email=...&httpHost=...&datetime_geq=...&datetime_leq=...
+ */
+async function handleUserInsights(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      hint: 'Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || 'emails';
+  const emailParam = url.searchParams.get('email');
+  const datetimeGeq = url.searchParams.get('datetime_geq');
+  const datetimeLeq = url.searchParams.get('datetime_leq');
+  const httpHostParam = url.searchParams.get('httpHost');
+
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setHours(start.getHours() - 24);
+  const defaultGeq = start.toISOString();
+  const defaultLeq = end.toISOString();
+  const geq = datetimeGeq || defaultGeq;
+  const leq = datetimeLeq || defaultLeq;
+
+  const filter = {
+    datetime_geq: geq,
+    datetime_leq: leq,
+    httpStatusCode_neq: 0
+  };
+
+  if (emailParam && emailParam.trim()) {
+    filter.email = emailParam.trim();
+  }
+
+  if (type === 'details' && httpHostParam) {
+    filter.httpHost = httpHostParam.trim();
+  }
+
+  let query;
+  if (type === 'emails') {
+    query = `query UserInsightsEmails($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { email }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'chart') {
+    query = `query UserInsightsChart($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [datetimeHour_ASC]) {
+              count
+              dimensions { datetimeHour }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'hosts') {
+    query = `query UserInsightsHosts($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 1000, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { httpHost }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'details') {
+    query = `query UserInsightsDetails($accountTag: string!, $filter: AccountGatewayL7RequestsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL7RequestsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [datetime_DESC]) {
+              count
+              dimensions { datetime url }
+            }
+          }
+        }
+      }`;
+  } else {
+    return new Response(JSON.stringify({ error: 'Invalid type', hint: 'Use type=emails|chart|hosts|details' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  if ((type === 'chart' || type === 'hosts' || type === 'details') && !filter.email) {
+    return new Response(JSON.stringify({ error: 'email is required for type=chart, hosts, details' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query,
+        variables: { accountTag: accountId, filter }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GraphQL ${response.status}: ${text}`);
+    }
+
+    const json = await response.json();
+    if (json.errors?.length) {
+      throw new Error(json.errors.map(e => e.message || JSON.stringify(e)).join('; '));
+    }
+
+    const accounts = json?.data?.viewer?.accounts || [];
+    const groups = accounts[0]?.gatewayL7RequestsAdaptiveGroups || [];
+
+    return new Response(JSON.stringify({
+      data: groups,
+      filter: { datetime_geq: geq, datetime_leq: leq, email: filter.email || null }
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('User Insights error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      hint: 'Ensure API token has Analytics Read (Gateway) permission'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * Network Insights - L4 Gateway session volume (last 24h).
+ * type=chart → volume (bytes) by hour
+ * type=origins → volume by origin IP (optionally for one hour)
+ * type=ports → for a given origin IP, volume by origin port
+ */
+async function handleNetworkInsights(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      hint: 'Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || 'chart';
+  const datetimeGeq = url.searchParams.get('datetime_geq');
+  const datetimeLeq = url.searchParams.get('datetime_leq');
+  const originIpParam = url.searchParams.get('originIp');
+  // Note: gatewayL4DownstreamSessionsAdaptiveGroups filter does not support email; L4 data is account-scoped.
+
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setHours(start.getHours() - 24);
+  const defaultGeq = start.toISOString();
+  const defaultLeq = end.toISOString();
+  const geq = datetimeGeq || defaultGeq;
+  const leq = datetimeLeq || defaultLeq;
+
+  const filterWithRange = { datetime_geq: geq, datetime_leq: leq };
+  if (originIpParam && originIpParam.trim()) {
+    filterWithRange.ipSourceAddress = originIpParam.trim();
+  }
+  // L4 chart: try range filter first; if empty, retry with single bound (datetime_gt) in case API ignores _leq.
+  let filter = filterWithRange;
+
+  // L4 adaptive groups: dimensions datetimeHour, ipSourceAddress, sourcePort. Fallback to count for volume.
+  let query;
+  if (type === 'chart') {
+    query = `query NetworkInsightsChart($accountTag: string!, $filter: AccountGatewayL4DownstreamSessionsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL4DownstreamSessionsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [datetimeHour_ASC]) {
+              count
+              dimensions { datetimeHour }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'origins') {
+    query = `query NetworkInsightsOrigins($accountTag: string!, $filter: AccountGatewayL4DownstreamSessionsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL4DownstreamSessionsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { ipSourceAddress }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'ports') {
+    if (!originIpParam || !originIpParam.trim()) {
+      return new Response(JSON.stringify({ error: 'originIp is required for type=ports' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+    query = `query NetworkInsightsPorts($accountTag: string!, $filter: AccountGatewayL4DownstreamSessionsAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayL4DownstreamSessionsAdaptiveGroups(limit: 500, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { sourcePort }
+            }
+          }
+        }
+      }`;
+  } else {
+    return new Response(JSON.stringify({ error: 'Invalid type', hint: 'Use type=chart|origins|ports' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query,
+        variables: { accountTag: accountId, filter }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GraphQL ${response.status}: ${text}`);
+    }
+
+    const json = await response.json();
+    if (json.errors?.length) {
+      const errMessages = json.errors.map(e => e.message || JSON.stringify(e)).join('; ');
+      const errDetails = json.errors.map(e => ({ message: e.message, path: e.path }));
+      return new Response(JSON.stringify({
+        error: errMessages,
+        hint: 'Check GraphQL schema for gatewayL4DownstreamSessionsAdaptiveGroups (dimensions/sum).',
+        details: errDetails
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    let accounts = json?.data?.viewer?.accounts || [];
+    let groups = accounts[0]?.gatewayL4DownstreamSessionsAdaptiveGroups || [];
+
+    // If chart returned empty, retry with single-bound filter (datetime_gt) in case this account's L4 API ignores _leq.
+    if (type === 'chart' && groups.length === 0 && !originIpParam) {
+      const filterSingle = { datetime_gt: geq };
+      const res2 = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: { accountTag: accountId, filter: filterSingle }
+        })
+      });
+      if (res2.ok) {
+        const json2 = await res2.json();
+        if (!json2.errors?.length) {
+          const acc2 = json2?.data?.viewer?.accounts || [];
+          const groups2 = acc2[0]?.gatewayL4DownstreamSessionsAdaptiveGroups || [];
+          if (groups2.length > 0) {
+            groups = groups2;
+          }
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({
+      data: groups,
+      filter: { datetime_geq: geq, datetime_leq: leq, originIp: filter.ipSourceAddress || null }
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Network Insights error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      hint: 'Ensure API token has Analytics Read (Gateway) permission. L4 dataset may use different dimension/sum names.'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * DNS Insights - Gateway DNS query volume over time, stacked by response result; drill to hostnames with category.
+ * GET /api/dns-insights?type=chart&datetime_geq=...&datetime_leq=...&email=...
+ * GET /api/dns-insights?type=hostnames&datetime_geq=...&datetime_leq=...&email=...
+ */
+async function handleDnsInsights(request, corsHeaders, env) {
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({
+      error: 'Missing Cloudflare API credentials',
+      hint: 'Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID'
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || 'chart';
+  const datetimeGeq = url.searchParams.get('datetime_geq');
+  const datetimeLeq = url.searchParams.get('datetime_leq');
+  // Note: gatewayResolverQueriesAdaptiveGroups filter does not support email; DNS data is account-scoped.
+
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setHours(start.getHours() - 24);
+  const defaultGeq = start.toISOString();
+  const defaultLeq = end.toISOString();
+  const geq = datetimeGeq || defaultGeq;
+  const leq = datetimeLeq || defaultLeq;
+
+  const filter = { datetime_geq: geq, datetime_leq: leq };
+
+  let query;
+  if (type === 'chart') {
+    query = `query DnsInsightsChart($accountTag: string!, $filter: AccountGatewayResolverQueriesAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayResolverQueriesAdaptiveGroups(limit: 1000, filter: $filter, orderBy: [datetimeHour_ASC]) {
+              count
+              dimensions { datetimeHour resolverDecision }
+            }
+          }
+        }
+      }`;
+  } else if (type === 'hostnames') {
+    // Note: AccountGatewayResolverQueriesAdaptiveGroups does not expose identity (email/userId) in dimensions or filter; hostnames are account-wide.
+    query = `query DnsInsightsHostnames($accountTag: string!, $filter: AccountGatewayResolverQueriesAdaptiveGroupsFilter_InputObject) {
+        viewer {
+          accounts(filter: { accountTag: $accountTag }) {
+            gatewayResolverQueriesAdaptiveGroups(limit: 1000, filter: $filter, orderBy: [count_DESC]) {
+              count
+              dimensions { queryName queryNameReversed resolverDecision }
+            }
+          }
+        }
+      }`;
+  } else {
+    return new Response(JSON.stringify({ error: 'Invalid type', hint: 'Use type=chart|hostnames' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + apiToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query,
+        variables: { accountTag: accountId, filter }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GraphQL ${response.status}: ${text}`);
+    }
+
+    const json = await response.json();
+    if (json.errors?.length) {
+      const errMessages = json.errors.map(e => e.message || JSON.stringify(e)).join('; ');
+      const errDetails = json.errors.map(e => ({ message: e.message, path: e.path }));
+      return new Response(JSON.stringify({
+        error: errMessages,
+        hint: 'Check GraphQL schema for gatewayResolverQueriesAdaptiveGroups (filter/dimensions).',
+        details: errDetails
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const accounts = json?.data?.viewer?.accounts || [];
+    const groups = accounts[0]?.gatewayResolverQueriesAdaptiveGroups || [];
+
+    return new Response(JSON.stringify({
+      data: groups,
+      filter: { datetime_geq: geq, datetime_leq: leq }
+    }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('DNS Insights error:', error);
+    return new Response(JSON.stringify({
+      error: error.message,
+      hint: 'Ensure API token has Analytics Read (Gateway) permission.'
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }

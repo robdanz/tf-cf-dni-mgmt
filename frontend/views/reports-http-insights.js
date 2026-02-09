@@ -220,7 +220,7 @@ function initHttpInsights(apiFn) {
             return { code, count: cnt, height: h };
           }).filter(s => s.count > 0);
           return `
-            <div class="http-insights-bar" data-hour="${hour}" style="flex: 1; min-width: 4px; max-width: 24px; display: flex; flex-direction: column-reverse; align-items: center; gap: 0;" title="${escapeHtml(rangeStr)}">
+            <div class="http-insights-bar" data-hour="${hour}" style="flex: 1; min-width: 2px; display: flex; flex-direction: column-reverse; align-items: center; gap: 0;" title="${escapeHtml(rangeStr)}">
               ${segments.map(s => `
                 <div class="http-insights-segment" data-code="${s.code}" data-count="${s.count}"
                   style="width: 100%; height: ${s.height}px; min-height: ${s.height > 0 ? 2 : 0}px; background: ${statusColor(s.code)}; border-radius: 1px; cursor: pointer;"

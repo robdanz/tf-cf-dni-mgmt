@@ -11,14 +11,20 @@
     '/analytics/performance': { view: 'views/analytics-performance.js', title: 'Network Analytics', subtitle: 'Performance metrics' },
     '/reports/tls-autopilot': { view: 'views/reports-tls-autopilot.js', title: 'Manage TLS Auto Pilot Lists', subtitle: 'Assign list roles and move hostnames' },
     '/reports/http-insights': { view: 'views/reports-http-insights.js', title: 'HTTP Insights', subtitle: 'Gateway L7 status codes and hostname breakdown' },
+    '/reports/dns-insights': { view: 'views/reports-dns-insights.js', title: 'DNS Insights', subtitle: 'Gateway DNS query volume by result and hostname' },
+    '/reports/user-insights': { view: 'views/reports-user-insights.js', title: 'User Insights', subtitle: 'HTTP traffic by user (last 24 hours)' },
   };
 
   async function api(path) {
     const opts = { credentials: 'include' };
     if (window.__authToken) opts.headers = { 'CF-Authorization': 'Bearer ' + window.__authToken };
     const res = await fetch(API + path, opts);
-    if (!res.ok) throw new Error(res.statusText);
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.error || data.message || res.statusText;
+      throw new Error(data.hint ? msg + ' — ' + data.hint : msg);
+    }
+    return data;
   }
 
   async function navigate(path) {
