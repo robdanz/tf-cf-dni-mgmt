@@ -425,7 +425,8 @@ async function handleGatewayLists(request, corsHeaders, env) {
 
 /**
  * Move hostname from TLS Hosts Bypass to Bypass or Block domain list.
- * Extracts domain by removing leading label: test.example.com → example.com
+ * Strips the first label: client.wns.windows.com → wns.windows.com
+ * PSL-safe: will not truncate below registrable domain (e.g. foo.co.uk stays).
  */
 async function handleGatewayListMove(request, corsHeaders, env) {
   if (request.method !== 'POST') {
@@ -456,10 +457,10 @@ async function handleGatewayListMove(request, corsHeaders, env) {
       });
     }
 
-    const domain = getRegistrableDomain(hostname);
+    const domain = stripFirstLabel(hostname) || getRegistrableDomain(hostname);
     if (!domain) {
       return new Response(JSON.stringify({
-        error: 'Could not extract registrable domain from hostname',
+        error: 'Could not extract domain from hostname',
         hint: 'Hostname may be an IP, invalid, or single-label. Use Remove to delete without moving.'
       }), {
         status: 400,
@@ -628,6 +629,22 @@ function getRegistrableDomain(hostname) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Strip the leading host label from a hostname.
+ * client.wns.windows.com → wns.windows.com
+ * Falls back to null if stripping would leave only a public suffix
+ * (e.g. foo.co.uk cannot be stripped to co.uk).
+ */
+function stripFirstLabel(hostname) {
+  const s = String(hostname || '').trim().toLowerCase();
+  if (!s) return null;
+  const dot = s.indexOf('.');
+  if (dot < 0) return null;
+  const stripped = s.slice(dot + 1);
+  if (psl.get(stripped)) return stripped;
+  return null;
 }
 
 /**
