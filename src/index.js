@@ -447,7 +447,7 @@ async function handleGatewayListMove(request, corsHeaders, env) {
 
   try {
     const body = await request.json();
-    const { hostname, sourceListId, targetListId } = body;
+    const { hostname, sourceListId, targetListId, mode = 'domain' } = body;
     if (!hostname || !sourceListId || !targetListId) {
       return new Response(JSON.stringify({
         error: 'hostname, sourceListId, and targetListId are required'
@@ -457,43 +457,55 @@ async function handleGatewayListMove(request, corsHeaders, env) {
       });
     }
 
-    const domain = stripFirstLabel(hostname) || getRegistrableDomain(hostname);
-    if (!domain) {
-      return new Response(JSON.stringify({
-        error: 'Could not extract domain from hostname',
-        hint: 'Hostname may be an IP, invalid, or single-label. Use Remove to delete without moving.'
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
     const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`;
     const headers = {
       'Authorization': 'Bearer ' + apiToken,
       'Content-Type': 'application/json'
     };
 
-    // Get source list and identify hostnames to remove (all matching this domain)
+    // Get source list items
     const srcRes = await fetch(`${base}/${sourceListId}`, { headers });
     if (!srcRes.ok) throw new Error('Failed to fetch source list');
     const srcData = await srcRes.json();
-    const srcList = srcData.result;
-    const allItems = srcList?.items || [];
-    const domainLower = domain.toLowerCase();
-    const toRemove = allItems.filter(i => {
-      const v = (i.value || i.hostname || '').toLowerCase();
-      const itemDomain = getRegistrableDomain(v);
-      return itemDomain && itemDomain.toLowerCase() === domainLower;
-    });
+    const allItems = srcData.result?.items || [];
+
+    let valueToAdd;
+    let toRemove;
+
+    if (mode === 'host') {
+      // Host mode: add exact hostname, remove only exact match from source
+      valueToAdd = hostname;
+      toRemove = allItems.filter(i => (i.value || i.hostname || '') === hostname);
+    } else {
+      // Domain mode: strip first label, remove all matching-domain entries from source
+      const domain = stripFirstLabel(hostname) || getRegistrableDomain(hostname);
+      if (!domain) {
+        return new Response(JSON.stringify({
+          error: 'Could not extract domain from hostname',
+          hint: 'Hostname may be an IP, invalid, or single-label. Use Remove to delete without moving.'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+      valueToAdd = domain;
+      const domainLower = domain.toLowerCase();
+      toRemove = allItems.filter(i => {
+        const v = (i.value || i.hostname || '').toLowerCase();
+        const itemDomain = getRegistrableDomain(v);
+        return itemDomain && itemDomain.toLowerCase() === domainLower;
+      });
+    }
+
     const removedCount = toRemove.length;
 
-    // Get target list and add domain (avoid duplicates)
+    // Get target list and add value (avoid duplicates)
     const tgtRes = await fetch(`${base}/${targetListId}`, { headers });
     if (!tgtRes.ok) throw new Error('Failed to fetch target list');
     const tgtData = await tgtRes.json();
     const tgtList = tgtData.result;
     const existingValues = new Set((tgtList?.items || []).map(i => (i.value || i.hostname || '').toLowerCase()));
-    const domainAlreadyInTarget = existingValues.has(domain.toLowerCase());
+    const alreadyInTarget = existingValues.has(valueToAdd.toLowerCase());
 
     // Use PATCH remove/append (Gateway API expects remove as array of value strings)
     const removeValues = toRemove.map(i => i.value || i.hostname || '').filter(Boolean);
@@ -504,11 +516,11 @@ async function handleGatewayListMove(request, corsHeaders, env) {
           body: JSON.stringify({ remove: removeValues })
         })
       : { ok: true };
-    const addRes = !domainAlreadyInTarget
+    const addRes = !alreadyInTarget
       ? await fetch(`${base}/${targetListId}`, {
           method: 'PATCH',
           headers,
-          body: JSON.stringify({ append: [{ value: domain }] })
+          body: JSON.stringify({ append: [{ value: valueToAdd }] })
         })
       : { ok: true };
 
@@ -524,9 +536,10 @@ async function handleGatewayListMove(request, corsHeaders, env) {
     return new Response(JSON.stringify({
       success: true,
       hostname,
-      domain,
+      value: valueToAdd,
       removedCount,
-      message: `Moved ${hostname} → ${domain} in target list`
+      mode,
+      message: `Moved ${hostname} → ${valueToAdd} in target list`
     }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });

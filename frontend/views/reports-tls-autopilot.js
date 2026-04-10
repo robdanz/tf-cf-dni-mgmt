@@ -26,7 +26,9 @@ export default async function render({ api }) {
       <div style="display: flex; flex-direction: column; gap: 0.75rem;">
         <div style="display: flex; align-items: center; gap: 1rem;"><label style="min-width: 220px;">TLS Hosts Bypass (Auto Pilot):</label><select id="autopilotList" style="flex: 1; max-width: 360px;"><option value="">-- Select --</option>${opts}</select></div>
         <div style="display: flex; align-items: center; gap: 1rem;"><label style="min-width: 220px;">Bypass Domains (curated):</label><select id="bypassList" style="flex: 1; max-width: 360px;"><option value="">-- Select --</option>${opts}</select></div>
+        <div style="display: flex; align-items: center; gap: 1rem;"><label style="min-width: 220px;">Bypass Hosts (curated):</label><select id="bypassHostList" style="flex: 1; max-width: 360px;"><option value="">-- Select --</option>${opts}</select></div>
         <div style="display: flex; align-items: center; gap: 1rem;"><label style="min-width: 220px;">Block Domains:</label><select id="blockList" style="flex: 1; max-width: 360px;"><option value="">-- Select --</option>${opts}</select></div>
+        <div style="display: flex; align-items: center; gap: 1rem;"><label style="min-width: 220px;">Block Hosts:</label><select id="blockHostList" style="flex: 1; max-width: 360px;"><option value="">-- Select --</option>${opts}</select></div>
       </div>
       <button id="refreshLists" style="margin-top: 1rem; padding: 0.5rem 1rem; cursor: pointer;">Refresh</button>
     </div>
@@ -55,8 +57,13 @@ function showMoveDialog(success, message, targetLabel, removedCount, isRemove) {
   if (success && isRemove) {
     text = 'Entry removed from the autopilot list.';
   } else if (success && typeof removedCount === 'number') {
-    const listName = (targetLabel || 'bypass') === 'block' ? 'block' : 'bypass';
-    text = 'Domain moved to ' + listName + ' list. ' + removedCount + ' matching hostname' + (removedCount === 1 ? ' has' : 's have') + ' been removed from the autopilot list.';
+    if (targetLabel === 'host-bypass' || targetLabel === 'host-block') {
+      const listName = targetLabel === 'host-bypass' ? 'host bypass' : 'host block';
+      text = 'Hostname moved to ' + listName + ' list. Removed from the autopilot list.';
+    } else {
+      const listName = targetLabel === 'domain-block' ? 'domain block' : 'domain bypass';
+      text = 'Domain moved to ' + listName + ' list. ' + removedCount + ' matching hostname' + (removedCount === 1 ? ' has' : 's have') + ' been removed from the autopilot list.';
+    }
   }
   box.innerHTML = '<p style="margin:0 0 1rem;color:#111;font-weight:500;">' + text.replace(/</g, '&lt;') + '</p><button id="moveDialogClose" style="padding:0.5rem 1rem;cursor:pointer;background:#333;color:white;border:none;border-radius:6px;">OK</button>';
   overlay.appendChild(box);
@@ -79,16 +86,44 @@ function pickListByRole(lists, role) {
     const best = lists.reduce((a, b) => (score(b, terms) > score(a, terms) ? b : a));
     return score(best, terms) > 0 ? best.id : null;
   }
-  if (role === 'bypass') {
+  if (role === 'bypassHost') {
     const autopilotId = pickListByRole(lists, 'autopilot');
     const candidates = lists.filter(l => l.id !== autopilotId && !exclude(l, ['autopilot', 'block', 'deny']));
+    // inspection is the key differentiator for 01-BYPASS-INSPECTION-HOSTS
+    const best = candidates.reduce((a, b) =>
+      score(b, ['inspection', 'bypass', 'host']) > score(a, ['inspection', 'bypass', 'host']) ? b : a
+    );
+    return score(best, ['inspection', 'bypass', 'host']) > 0 ? best.id : null;
+  }
+  if (role === 'bypass') {
+    const autopilotId = pickListByRole(lists, 'autopilot');
+    const bypassHostId = pickListByRole(lists, 'bypassHost');
+    const candidates = lists.filter(l =>
+      l.id !== autopilotId && l.id !== bypassHostId &&
+      !exclude(l, ['autopilot', 'block', 'deny', 'inspection'])
+    );
     const best = candidates.reduce((a, b) =>
       score(b, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) > score(a, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) ? b : a
     );
     return score(best, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) > 0 ? best.id : null;
   }
+  if (role === 'blockHost') {
+    const autopilotId = pickListByRole(lists, 'autopilot');
+    const candidates = lists.filter(l => l.id !== autopilotId && !exclude(l, ['autopilot', 'bypass', 'inspection']));
+    // host is the key differentiator for 01-BLOCK-HOST-LIST
+    const best = candidates.reduce((a, b) =>
+      score(b, ['block', 'host']) > score(a, ['block', 'host']) ? b : a
+    );
+    return score(best, ['block', 'host']) > 0 ? best.id : null;
+  }
   if (role === 'block') {
-    const best = lists.reduce((a, b) =>
+    const autopilotId = pickListByRole(lists, 'autopilot');
+    const blockHostId = pickListByRole(lists, 'blockHost');
+    const candidates = lists.filter(l =>
+      l.id !== autopilotId && l.id !== blockHostId &&
+      !exclude(l, ['autopilot', 'bypass'])
+    );
+    const best = candidates.reduce((a, b) =>
       score(b, ['block', 'deny', 'blocklist']) > score(a, ['block', 'deny', 'blocklist']) ? b : a
     );
     return score(best, ['block', 'deny', 'blocklist']) > 0 ? best.id : null;
@@ -99,7 +134,6 @@ function pickListByRole(lists, role) {
 function initTlsAutopilot(lists) {
   let listsRef = lists;
   const container = document.getElementById('hostnameListContainer');
-  const msg = document.getElementById('messageArea');
   const apiBase = window.CF_ANALYST_CONFIG?.apiBase || '';
 
   async function refetchLists() {
@@ -117,8 +151,11 @@ function initTlsAutopilot(lists) {
       return;
     }
     const bypassId = document.getElementById('bypassList')?.value;
+    const bypassHostId = document.getElementById('bypassHostList')?.value;
     const blockId = document.getElementById('blockList')?.value;
+    const blockHostId = document.getElementById('blockHostList')?.value;
     const sourceId = document.getElementById('autopilotList')?.value;
+
     container.innerHTML = '<div style="display:flex;flex-direction:column;gap:0.5rem;">' +
       list.items.map(item => {
         const v = (item.value || item.hostname || '').replace(/"/g, '&quot;');
@@ -128,14 +165,16 @@ function initTlsAutopilot(lists) {
             '<span style="font-family:monospace">' + v + '</span>' +
             '<span class="domain-cat" data-host="' + esc + '" style="font-size:0.75rem;color:#666;">Loading categorization…</span>' +
           '</div>' +
-          '<div style="display:flex;gap:0.5rem;">' +
-            (bypassId ? '<button data-action="move" data-host="' + esc + '" data-target="' + bypassId + '" data-target-label="bypass" style="padding:0.4rem 0.75rem;background:#10B981;color:white;border:none;border-radius:6px;cursor:pointer">To Bypass</button>' : '') +
-            (blockId ? '<button data-action="move" data-host="' + esc + '" data-target="' + blockId + '" data-target-label="block" style="padding:0.4rem 0.75rem;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer">To Block</button>' : '') +
+          '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;">' +
+            (bypassHostId ? '<button data-action="move" data-host="' + esc + '" data-target="' + bypassHostId + '" data-target-label="host-bypass" data-mode="host" style="padding:0.4rem 0.75rem;background:#059669;color:white;border:none;border-radius:6px;cursor:pointer">To Host Bypass</button>' : '') +
+            (bypassId ? '<button data-action="move" data-host="' + esc + '" data-target="' + bypassId + '" data-target-label="domain-bypass" data-mode="domain" style="padding:0.4rem 0.75rem;background:#10B981;color:white;border:none;border-radius:6px;cursor:pointer">To Domain Bypass</button>' : '') +
+            (blockHostId ? '<button data-action="move" data-host="' + esc + '" data-target="' + blockHostId + '" data-target-label="host-block" data-mode="host" style="padding:0.4rem 0.75rem;background:#DC2626;color:white;border:none;border-radius:6px;cursor:pointer">To Host Block</button>' : '') +
+            (blockId ? '<button data-action="move" data-host="' + esc + '" data-target="' + blockId + '" data-target-label="domain-block" data-mode="domain" style="padding:0.4rem 0.75rem;background:#EF4444;color:white;border:none;border-radius:6px;cursor:pointer">To Domain Block</button>' : '') +
             (sourceId ? '<button data-action="remove" data-host="' + esc + '" data-list="' + sourceId + '" style="padding:0.4rem 0.75rem;background:#6B7280;color:white;border:none;border-radius:6px;cursor:pointer">Remove</button>' : '') +
           '</div></div>';
       }).join('') + '</div>';
 
-    // Fetch Cloudflare Intel categorization for each unique hostname (backend extracts registrable domain)
+    // Fetch Cloudflare Intel categorization for each unique hostname
     const hostnames = [...new Set(list.items.map(i => (i.value || i.hostname || '').trim()).filter(Boolean))];
     const catCache = {};
     Promise.all(hostnames.map(async (h) => {
@@ -167,7 +206,8 @@ function initTlsAutopilot(lists) {
       btn.addEventListener('click', async () => {
         const hostname = btn.getAttribute('data-host')?.replace(/&quot;/g, '"').replace(/\\'/g, "'");
         const targetId = btn.getAttribute('data-target');
-        const targetLabel = btn.getAttribute('data-target-label') || 'bypass';
+        const targetLabel = btn.getAttribute('data-target-label') || 'domain-bypass';
+        const mode = btn.getAttribute('data-mode') || 'domain';
         const sourceId = document.getElementById('autopilotList')?.value;
         if (!sourceId) {
           showMoveDialog(false, 'Select Auto Pilot list first.', targetLabel);
@@ -177,7 +217,7 @@ function initTlsAutopilot(lists) {
           const res = await fetch(apiBase + '/api/gateway/lists/move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hostname, sourceListId: sourceId, targetListId: targetId })
+            body: JSON.stringify({ hostname, sourceListId: sourceId, targetListId: targetId, mode })
           });
           const data = await res.json();
           if (data.error) throw new Error(data.error);
@@ -216,29 +256,33 @@ function initTlsAutopilot(lists) {
     });
   }
 
+  const reloadIfActive = () => {
+    const aid = document.getElementById('autopilotList')?.value;
+    if (aid) loadHostnames(aid);
+  };
+
   document.getElementById('autopilotList')?.addEventListener('change', function () {
     if (this.value) loadHostnames(this.value);
     else container.innerHTML = '<div class="loading">Select the TLS Hosts Bypass list above.</div>';
   });
-  document.getElementById('bypassList')?.addEventListener('change', () => {
-    const aid = document.getElementById('autopilotList')?.value;
-    if (aid) loadHostnames(aid);
-  });
-  document.getElementById('blockList')?.addEventListener('change', () => {
-    const aid = document.getElementById('autopilotList')?.value;
-    if (aid) loadHostnames(aid);
-  });
+  document.getElementById('bypassList')?.addEventListener('change', reloadIfActive);
+  document.getElementById('bypassHostList')?.addEventListener('change', reloadIfActive);
+  document.getElementById('blockList')?.addEventListener('change', reloadIfActive);
+  document.getElementById('blockHostList')?.addEventListener('change', reloadIfActive);
   document.getElementById('refreshLists')?.addEventListener('click', () => window.location.reload());
 
-  // Pre-populate dropdowns by name and load hostnames if autopilot matched
+  // Pre-populate dropdowns by heuristic name matching
   const autopilotId = pickListByRole(lists, 'autopilot');
   const bypassId = pickListByRole(lists, 'bypass');
+  const bypassHostId = pickListByRole(lists, 'bypassHost');
   const blockId = pickListByRole(lists, 'block');
-  const autopilotEl = document.getElementById('autopilotList');
-  const bypassEl = document.getElementById('bypassList');
-  const blockEl = document.getElementById('blockList');
-  if (autopilotId && autopilotEl) autopilotEl.value = autopilotId;
-  if (bypassId && bypassEl) bypassEl.value = bypassId;
-  if (blockId && blockEl) blockEl.value = blockId;
+  const blockHostId = pickListByRole(lists, 'blockHost');
+
+  if (autopilotId) document.getElementById('autopilotList').value = autopilotId;
+  if (bypassId) document.getElementById('bypassList').value = bypassId;
+  if (bypassHostId) document.getElementById('bypassHostList').value = bypassHostId;
+  if (blockId) document.getElementById('blockList').value = blockId;
+  if (blockHostId) document.getElementById('blockHostList').value = blockHostId;
+
   if (autopilotId) loadHostnames(autopilotId);
 }
