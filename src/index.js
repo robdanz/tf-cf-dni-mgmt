@@ -507,7 +507,24 @@ async function handleGatewayListMove(request, corsHeaders, env) {
     const existingValues = new Set((tgtList?.items || []).map(i => (i.value || i.hostname || '').toLowerCase()));
     const alreadyInTarget = existingValues.has(valueToAdd.toLowerCase());
 
-    // Use PATCH remove/append (Gateway API expects remove as array of value strings)
+    // For domain mode: if the value is already in the target (pre-check or API rejection),
+    // still remove it from source rather than failing the whole operation.
+    let addErr = null;
+    if (!alreadyInTarget) {
+      const addRes = await fetch(`${base}/${targetListId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ append: [{ value: valueToAdd }] })
+      });
+      if (!addRes.ok) {
+        const errText = await addRes.text();
+        const isDuplicate = /duplicate|already exist/i.test(errText);
+        if (!isDuplicate) addErr = parseApiError(errText);
+        // duplicate → fall through and still remove from source
+      }
+    }
+
+    // Use PATCH remove (Gateway API expects remove as array of value strings)
     const removeValues = toRemove.map(i => i.value || i.hostname || '').filter(Boolean);
     const removeRes = removeValues.length > 0
       ? await fetch(`${base}/${sourceListId}`, {
@@ -516,21 +533,13 @@ async function handleGatewayListMove(request, corsHeaders, env) {
           body: JSON.stringify({ remove: removeValues })
         })
       : { ok: true };
-    const addRes = !alreadyInTarget
-      ? await fetch(`${base}/${targetListId}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ append: [{ value: valueToAdd }] })
-        })
-      : { ok: true };
 
-    if (!removeRes.ok || !addRes.ok) {
+    if (!removeRes.ok) {
       const remErr = await removeRes.text();
-      const addErr = await addRes.text();
-      let errMsg = 'Update failed';
-      if (!removeRes.ok) errMsg += ' (source list): ' + parseApiError(remErr);
-      if (!addRes.ok) errMsg += (errMsg !== 'Update failed' ? '; ' : ' ') + '(target list): ' + parseApiError(addErr);
-      throw new Error(errMsg);
+      throw new Error('Update failed (source list): ' + parseApiError(remErr));
+    }
+    if (addErr) {
+      throw new Error('Update failed (target list): ' + addErr);
     }
 
     return new Response(JSON.stringify({
