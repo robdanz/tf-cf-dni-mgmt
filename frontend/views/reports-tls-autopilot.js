@@ -100,12 +100,13 @@ function pickListByRole(lists, role) {
     const bypassHostId = pickListByRole(lists, 'bypassHost');
     const candidates = lists.filter(l =>
       l.id !== autopilotId && l.id !== bypassHostId &&
-      !exclude(l, ['autopilot', 'block', 'deny', 'inspection'])
+      !exclude(l, ['autopilot', 'block', 'deny'])
     );
+    // domain/inspection are key differentiators for 01-BYPASS-INSPECTION-DOMAINS
     const best = candidates.reduce((a, b) =>
-      score(b, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) > score(a, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) ? b : a
+      score(b, ['bypass', 'domain', 'inspection', 'allow', 'whitelist', 'allowlist', 'curated']) > score(a, ['bypass', 'domain', 'inspection', 'allow', 'whitelist', 'allowlist', 'curated']) ? b : a
     );
-    return score(best, ['bypass', 'allow', 'whitelist', 'allowlist', 'curated']) > 0 ? best.id : null;
+    return score(best, ['bypass', 'domain', 'inspection', 'allow', 'whitelist', 'allowlist', 'curated']) > 0 ? best.id : null;
   }
   if (role === 'blockHost') {
     const autopilotId = pickListByRole(lists, 'autopilot');
