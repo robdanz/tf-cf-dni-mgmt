@@ -490,10 +490,11 @@ async function handleGatewayListMove(request, corsHeaders, env) {
       }
       valueToAdd = domain;
       const domainLower = domain.toLowerCase();
+      // Remove source entries that are the domain itself or any subdomain of it.
+      // e.g. valueToAdd=xx.fbcdn.net removes scontent-dfw5-2.xx.fbcdn.net, video.xx.fbcdn.net, xx.fbcdn.net
       toRemove = allItems.filter(i => {
         const v = (i.value || i.hostname || '').toLowerCase();
-        const itemDomain = getRegistrableDomain(v);
-        return itemDomain && itemDomain.toLowerCase() === domainLower;
+        return v === domainLower || v.endsWith('.' + domainLower);
       });
     }
 
