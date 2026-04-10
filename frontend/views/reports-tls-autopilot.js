@@ -34,7 +34,12 @@ export default async function render({ api }) {
     </div>
     <div class="card">
       <h2 class="card-title">2. Move hostnames</h2>
-      <p style="margin-bottom: 1rem; color: #666;">Select the Auto Pilot list above, then move hostnames to Bypass or Block.</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <p style="margin:0;color:#666;">Select the Auto Pilot list above, then move hostnames to Bypass or Block.</p>
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;color:#666;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" id="showConfirmation" checked style="cursor:pointer;"> Show confirmation
+        </label>
+      </div>
       <div id="hostnameListContainer"><div class="loading">Select the TLS Hosts Bypass list above.</div></div>
     </div>
     <div id="messageArea"></div>
@@ -222,7 +227,9 @@ function initTlsAutopilot(lists) {
           });
           const data = await res.json();
           if (data.error) throw new Error(data.error);
-          showMoveDialog(true, '', targetLabel, data.removedCount ?? 1);
+          if (document.getElementById('showConfirmation')?.checked) {
+            showMoveDialog(true, '', targetLabel, data.removedCount ?? 1);
+          }
           await refetchLists();
           loadHostnames(sourceId);
         } catch (e) {
@@ -247,7 +254,9 @@ function initTlsAutopilot(lists) {
           });
           const data = await res.json();
           if (data.error) throw new Error(data.error);
-          showMoveDialog(true, '', null, null, true);
+          if (document.getElementById('showConfirmation')?.checked) {
+            showMoveDialog(true, '', null, null, true);
+          }
           await refetchLists();
           loadHostnames(listId);
         } catch (e) {
