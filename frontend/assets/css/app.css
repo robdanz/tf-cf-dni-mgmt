@@ -47,14 +47,10 @@ body {
   white-space: nowrap;
 }
 
-.top-bar-select {
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.25rem 0.5rem;
+.top-bar-source {
+  color: var(--text-muted);
   font-size: 0.8125rem;
-  max-width: 320px;
+  white-space: nowrap;
 }
 
 .top-bar-search {

@@ -8,10 +8,11 @@ export default function render({ api, showToast }) {
   let catCache = {};
   let selectedIdx = -1;
   let filterText = '';
+  let activeSourceId = '';
 
   const listBody = document.getElementById('listBody');
   const detailPanel = document.getElementById('detailPanel');
-  const sourceSelect = document.getElementById('sourceList');
+  const sourceLabel = document.getElementById('sourceLabel');
   const searchInput = document.getElementById('searchInput');
   const entryCount = document.getElementById('entryCount');
   const settingsBtn = document.getElementById('settingsBtn');
@@ -45,10 +46,10 @@ export default function render({ api, showToast }) {
       return;
     }
     populateRoleSelects();
-    populateSourceSelect();
     const autopilotId = document.getElementById('autopilotList')?.value;
     if (autopilotId) {
-      sourceSelect.value = autopilotId;
+      activeSourceId = autopilotId;
+      updateSourceLabel();
       loadHostnames(autopilotId);
     }
   }
@@ -79,10 +80,9 @@ export default function render({ api, showToast }) {
     if (inspectHostId) document.getElementById('inspectHostList').value = inspectHostId;
   }
 
-  function populateSourceSelect() {
-    sourceSelect.innerHTML = lists.map(l =>
-      '<option value="' + l.id + '">' + (l.name || l.id) + ' (' + (l.items?.length || 0) + ')</option>'
-    ).join('');
+  function updateSourceLabel() {
+    const list = lists.find(l => l.id === activeSourceId);
+    sourceLabel.textContent = list ? (list.name || list.id) + ' (' + (list.items?.length || 0) + ')' : 'No list selected';
   }
 
   function loadHostnames(listId) {
@@ -218,7 +218,7 @@ export default function render({ api, showToast }) {
     const blockHostId = document.getElementById('blockHostList')?.value;
     const inspectId = document.getElementById('inspectList')?.value;
     const inspectHostId = document.getElementById('inspectHostList')?.value;
-    const sourceId = sourceSelect.value;
+    const sourceId = activeSourceId;
 
     function listName(id) {
       const l = lists.find(x => x.id === id);
@@ -353,7 +353,7 @@ export default function render({ api, showToast }) {
       selectedIdx = oldIdx;
     }
 
-    populateSourceSelect();
+    updateSourceLabel();
     renderList();
     renderDetail();
   }
@@ -366,12 +366,6 @@ export default function render({ api, showToast }) {
       filterText = searchInput.value.trim();
       renderList();
     }, 150);
-  });
-
-  // --- Source list change ---
-  sourceSelect.addEventListener('change', () => {
-    const id = sourceSelect.value;
-    if (id) loadHostnames(id);
   });
 
   // --- Escape ---
@@ -453,6 +447,15 @@ export default function render({ api, showToast }) {
     }
     return null;
   }
+
+  // --- Autopilot dropdown change in settings reloads the source ---
+  document.getElementById('autopilotList')?.addEventListener('change', function () {
+    if (this.value) {
+      activeSourceId = this.value;
+      updateSourceLabel();
+      loadHostnames(this.value);
+    }
+  });
 
   // --- Init ---
   loadLists();
