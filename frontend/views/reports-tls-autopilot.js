@@ -168,7 +168,7 @@ function initTlsAutopilot(lists) {
         const esc = v.replace(/'/g, "\\'");
         return '<div class="hostname-row" data-host="' + esc + '" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.75rem;background:#f8f9fa;border-radius:8px;">' +
           '<div style="display:flex;flex-direction:column;gap:0.25rem;">' +
-            '<span style="font-family:monospace">' + v + '</span>' +
+            '<a href="https://radar.cloudflare.com/domains/domain/' + v + '" target="_blank" rel="noopener noreferrer" style="font-family:monospace;color:inherit;text-decoration:none;border-bottom:1px dotted #999;">' + v + '</a>' +
             '<span class="domain-cat" data-host="' + esc + '" style="font-size:0.75rem;color:#666;">Loading categorization…</span>' +
           '</div>' +
           '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;">' +

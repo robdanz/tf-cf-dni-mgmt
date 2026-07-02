@@ -1,18 +1,13 @@
 /**
- * CF-Analyst frontend - Router and app bootstrap
+ * DNI List Manager - Router and app bootstrap
  */
 (function () {
   const config = window.CF_ANALYST_CONFIG || { apiBase: '' };
   const API = config.apiBase;
 
   const routes = {
-    '/': { view: 'views/home.js', title: 'CF1 Cockpit', subtitle: 'Cloudflare One visual utilities' },
-    '/analytics/traffic': { view: 'views/analytics-traffic.js', title: 'Web Analytics', subtitle: 'Traffic overview' },
-    '/analytics/performance': { view: 'views/analytics-performance.js', title: 'Network Analytics', subtitle: 'Performance metrics' },
-    '/reports/tls-autopilot': { view: 'views/reports-tls-autopilot.js', title: 'Manage TLS Auto Pilot Lists', subtitle: 'Assign list roles and move hostnames' },
-    '/reports/http-insights': { view: 'views/reports-http-insights.js', title: 'HTTP Insights', subtitle: 'Gateway L7 status codes and hostname breakdown' },
-    '/reports/dns-insights': { view: 'views/reports-dns-insights.js', title: 'DNS Insights', subtitle: 'Gateway DNS query volume by result and hostname' },
-    '/reports/user-insights': { view: 'views/reports-user-insights.js', title: 'User Insights', subtitle: 'HTTP traffic by user (last 24 hours)' },
+    '/': { view: 'views/reports-tls-autopilot.js', title: 'DNI List Manager', subtitle: 'Zero Trust Gateway Do-Not-Inspect list management' },
+    '/dni/lists': { view: 'views/reports-tls-autopilot.js', title: 'DNI List Manager', subtitle: 'Assign list roles and move hostnames' },
   };
 
   async function api(path) {

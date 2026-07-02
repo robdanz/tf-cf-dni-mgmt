@@ -16,6 +16,7 @@ yarn-error.log*
 dist/
 build/
 *.tsbuildinfo
+frontend/assets/js/build-info.js
 
 # Logs
 logs
@@ -101,3 +102,5 @@ Thumbs.db
 
 # Project setup guides (local reference only)
 PROJECT_SETUP_GUIDE.md
+CLAUDE.md
+AI_SETUP_INSTRUCTIONS*

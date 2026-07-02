@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="cf-analyst-api-base" content="https://cf-analyst.rob-danz.workers.dev">
-  <title>CF1 Cockpit</title>
+  <meta name="dni-mgmt-api-base" content="https://tf-cf-dni-mgmt.rob-danz.workers.dev">
+  <title>DNI List Manager</title>
   <link rel="stylesheet" href="/assets/css/app.css">
 </head>
 <body>
   <div class="app-container">
     <nav class="sidebar">
       <div class="sidebar-header">
-        <div class="logo">☁️ CF1 Cockpit</div>
+        <div class="logo">🛡️ DNI List Manager</div>
+        <div id="buildStamp" style="font-size:0.65rem;color:#93c5fd;margin-top:0.25rem;font-family:monospace;"></div>
       </div>
       <div class="menu" id="menu"></div>
       <div class="sidebar-footer">
@@ -26,8 +27,8 @@
     </nav>
     <main class="main-content">
       <div class="content-header" id="contentHeader">
-        <h1 class="content-title">CF1 Cockpit</h1>
-        <p class="content-subtitle">Cloudflare One visual utilities</p>
+        <h1 class="content-title">DNI List Manager</h1>
+        <p class="content-subtitle">Zero Trust Gateway Do-Not-Inspect list management</p>
       </div>
       <div class="content-body" id="contentBody">
         <div class="loading">Loading...</div>
@@ -35,6 +36,17 @@
     </main>
   </div>
   <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/build-info.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById('buildStamp');
+      if (!el) return;
+      var ts = window.__BUILD_TIME__;
+      if (!ts) { el.textContent = 'dev build'; return; }
+      var d = new Date(ts);
+      el.textContent = 'built ' + d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    })();
+  </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>

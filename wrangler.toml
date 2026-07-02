@@ -1,29 +1,11 @@
-name = "cf-analyst"
+name = "tf-cf-dni-mgmt"
 main = "src/index.js"
 compatibility_date = "2023-12-01"
 
 [env.production]
-name = "cf-analyst"
+name = "tf-cf-dni-mgmt"
 vars = { ENVIRONMENT = "production" }
 
-[[env.production.routes]]
-pattern = "cf-analyst.tancow.net"
-custom_domain = true
-
 [env.staging]
-name = "cf-analyst-staging"
+name = "tf-cf-dni-mgmt-staging"
 vars = { ENVIRONMENT = "staging" }
-
-# Uncomment and configure these as needed
-# [[kv_namespaces]]
-# binding = "MY_KV_NAMESPACE"
-# id = "your-kv-namespace-id"
-
-# [[r2_buckets]]
-# binding = "MY_BUCKET"
-# bucket_name = "my-bucket"
-
-# [durable_objects]
-# bindings = [
-#   { name = "MY_DURABLE_OBJECT", class_name = "MyDurableObject" }
-# ]
