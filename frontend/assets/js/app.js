@@ -11,9 +11,7 @@
   };
 
   async function api(path) {
-    const opts = { credentials: 'include' };
-    if (window.__authToken) opts.headers = { 'CF-Authorization': 'Bearer ' + window.__authToken };
-    const res = await fetch(API + path, opts);
+    const res = await fetch(API + path, { credentials: 'include' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = data.error || data.message || res.statusText;
@@ -127,5 +125,5 @@
     init();
   }
 
-  window.cfAnalyst = { navigate, api: () => api };
+  window.cfAnalyst = { navigate };
 })();
