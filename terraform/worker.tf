@@ -22,7 +22,7 @@ resource "null_resource" "worker_deploy" {
 
   provisioner "local-exec" {
     working_dir = "${path.module}/.."
-    command     = "npm run stamp && npx wrangler deploy"
+    command     = "npm ci && npm run stamp && ./node_modules/.bin/wrangler deploy"
     environment = {
       CLOUDFLARE_API_TOKEN  = var.cloudflare_api_token
       CLOUDFLARE_ACCOUNT_ID = var.cloudflare_account_id
@@ -43,10 +43,10 @@ resource "null_resource" "worker_secrets" {
   provisioner "local-exec" {
     working_dir = "${path.module}/.."
     command     = <<-EOT
-      echo "$WORKER_CF_TOKEN" | npx wrangler secret put CLOUDFLARE_API_TOKEN &&
-      echo "$WORKER_ACCOUNT_ID" | npx wrangler secret put CLOUDFLARE_ACCOUNT_ID &&
-      echo "$WORKER_ACCESS_AUD" | npx wrangler secret put ACCESS_AUD &&
-      echo "$WORKER_ACCESS_TEAM" | npx wrangler secret put ACCESS_TEAM
+      echo "$WORKER_CF_TOKEN" | ./node_modules/.bin/wrangler secret put CLOUDFLARE_API_TOKEN &&
+      echo "$WORKER_ACCOUNT_ID" | ./node_modules/.bin/wrangler secret put CLOUDFLARE_ACCOUNT_ID &&
+      echo "$WORKER_ACCESS_AUD" | ./node_modules/.bin/wrangler secret put ACCESS_AUD &&
+      echo "$WORKER_ACCESS_TEAM" | ./node_modules/.bin/wrangler secret put ACCESS_TEAM
     EOT
     environment = {
       CLOUDFLARE_API_TOKEN  = var.cloudflare_api_token
