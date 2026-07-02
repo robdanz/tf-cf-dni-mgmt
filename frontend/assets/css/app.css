@@ -11,6 +11,8 @@
   --bypass-host: #0e7490;
   --block-domain: #b91c1c;
   --block-host: #991b1b;
+  --inspect-domain: #7c3aed;
+  --inspect-host: #6d28d9;
   --cat-content-bg: #064e3b;
   --cat-content-text: #6ee7b7;
   --cat-security-bg: #78350f;
@@ -286,6 +288,8 @@ body {
 .action-btn.bypass-host { background: var(--bypass-host); }
 .action-btn.block-domain { background: var(--block-domain); }
 .action-btn.block-host { background: var(--block-host); }
+.action-btn.inspect-domain { background: var(--inspect-domain); }
+.action-btn.inspect-host { background: var(--inspect-host); }
 
 .action-btn.remove {
   background: var(--bg-elevated);

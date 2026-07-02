@@ -57,7 +57,7 @@ export default function render({ api, showToast }) {
     const opts = '<option value="">-- Select --</option>' +
       lists.map(l => '<option value="' + l.id + '">' + (l.name || l.id) + ' (' + (l.items?.length || 0) + ')</option>').join('');
 
-    ['autopilotList', 'bypassList', 'bypassHostList', 'blockList', 'blockHostList'].forEach(id => {
+    ['autopilotList', 'bypassList', 'bypassHostList', 'blockList', 'blockHostList', 'inspectList', 'inspectHostList'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = opts;
     });
@@ -67,12 +67,16 @@ export default function render({ api, showToast }) {
     const bypassHostId = pickListByRole(lists, 'bypassHost');
     const blockId = pickListByRole(lists, 'block');
     const blockHostId = pickListByRole(lists, 'blockHost');
+    const inspectId = pickListByRole(lists, 'inspect');
+    const inspectHostId = pickListByRole(lists, 'inspectHost');
 
     if (autopilotId) document.getElementById('autopilotList').value = autopilotId;
     if (bypassId) document.getElementById('bypassList').value = bypassId;
     if (bypassHostId) document.getElementById('bypassHostList').value = bypassHostId;
     if (blockId) document.getElementById('blockList').value = blockId;
     if (blockHostId) document.getElementById('blockHostList').value = blockHostId;
+    if (inspectId) document.getElementById('inspectList').value = inspectId;
+    if (inspectHostId) document.getElementById('inspectHostList').value = inspectHostId;
   }
 
   function populateSourceSelect() {
@@ -199,6 +203,8 @@ export default function render({ api, showToast }) {
     const bypassHostId = document.getElementById('bypassHostList')?.value;
     const blockId = document.getElementById('blockList')?.value;
     const blockHostId = document.getElementById('blockHostList')?.value;
+    const inspectId = document.getElementById('inspectList')?.value;
+    const inspectHostId = document.getElementById('inspectHostList')?.value;
     const sourceId = sourceSelect.value;
 
     function listName(id) {
@@ -247,6 +253,11 @@ export default function render({ api, showToast }) {
         '<div class="action-row">' +
           (blockId ? '<button class="action-btn block-domain" data-action="move" data-target="' + blockId + '" data-mode="domain" data-label="domain block" title="Target: ' + escHtml(listName(blockId)) + '">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
           (blockHostId ? '<button class="action-btn block-host" data-action="move" data-target="' + blockHostId + '" data-mode="host" data-label="host block" title="Target: ' + escHtml(listName(blockHostId)) + '">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
+        '</div>' +
+        '<div class="action-group-label">Always Inspect</div>' +
+        '<div class="action-row">' +
+          (inspectId ? '<button class="action-btn inspect-domain" data-action="move" data-target="' + inspectId + '" data-mode="domain" data-label="domain inspect" title="Target: ' + escHtml(listName(inspectId)) + '">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
+          (inspectHostId ? '<button class="action-btn inspect-host" data-action="move" data-target="' + inspectHostId + '" data-mode="host" data-label="host inspect" title="Target: ' + escHtml(listName(inspectHostId)) + '">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
         '</div>' +
         (sourceId ? '<button class="action-btn remove" data-action="remove">Remove from queue</button>' : '') +
       '</div>';
@@ -408,6 +419,24 @@ export default function render({ api, showToast }) {
         score(b, ['block', 'deny', 'blocklist']) > score(a, ['block', 'deny', 'blocklist']) ? b : a
       );
       return score(best, ['block', 'deny', 'blocklist']) > 0 ? best.id : null;
+    }
+    if (role === 'inspectHost') {
+      const candidates = lists.filter(l => !exclude(l, ['autopilot', 'bypass', 'block', 'deny']));
+      const best = candidates.reduce((a, b) =>
+        score(b, ['always', 'inspect', 'host']) > score(a, ['always', 'inspect', 'host']) ? b : a
+      );
+      return score(best, ['always', 'inspect', 'host']) > 0 ? best.id : null;
+    }
+    if (role === 'inspect') {
+      const inspectHostId = pickListByRole(lists, 'inspectHost');
+      const candidates = lists.filter(l =>
+        l.id !== inspectHostId &&
+        !exclude(l, ['autopilot', 'bypass', 'block', 'deny'])
+      );
+      const best = candidates.reduce((a, b) =>
+        score(b, ['always', 'inspect', 'domain']) > score(a, ['always', 'inspect', 'domain']) ? b : a
+      );
+      return score(best, ['always', 'inspect', 'domain']) > 0 ? best.id : null;
     }
     return null;
   }
