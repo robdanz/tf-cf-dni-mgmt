@@ -98,21 +98,16 @@ export default function render({ api, showToast }) {
     renderList();
     if (hostItems.length > 0) selectItem(0);
     else renderDetail();
-    fetchAllCategories();
   }
 
-  // --- Intel categorization ---
-  async function fetchAllCategories() {
-    const hostnames = [...new Set(hostItems.map(i => i.value).filter(Boolean))];
-    await Promise.all(hostnames.map(async (h) => {
-      try {
-        const data = await api('/api/intel/domain?domain=' + encodeURIComponent(h));
-        if (!data.error) catCache[h] = data;
-      } catch (_) {}
-    }));
-    hostItems.forEach(item => { item.cat = catCache[item.value] || null; });
-    renderList();
-    if (selectedIdx >= 0) renderDetail();
+  // --- Intel categorization (on-demand per hostname) ---
+  async function fetchCategory(hostname) {
+    if (catCache[hostname] !== undefined) return;
+    catCache[hostname] = null; // mark as fetching
+    try {
+      const data = await api('/api/intel/domain?domain=' + encodeURIComponent(hostname));
+      if (!data.error) catCache[hostname] = data;
+    } catch (_) {}
   }
 
   function catSummary(cat) {
@@ -162,11 +157,10 @@ export default function render({ api, showToast }) {
       const globalIdx = hostItems.indexOf(item);
       const selected = globalIdx === selectedIdx ? ' selected' : '';
       const summary = catSummary(item.cat);
-      const catClass = item.cat === null && !catCache[item.value] ? ' loading' : '';
-      const catText = item.cat === null && !catCache[item.value] ? 'Loading...' : (summary || 'No categorization');
+      const catText = summary || '';
       return '<div class="list-item' + selected + '" data-idx="' + globalIdx + '">' +
         '<div class="list-item-host">' + escHtml(item.value) + '</div>' +
-        '<div class="list-item-cat' + catClass + '">' + escHtml(catText) + '</div>' +
+        (catText ? '<div class="list-item-cat">' + escHtml(catText) + '</div>' : '') +
       '</div>';
     }).join('');
 
@@ -177,12 +171,31 @@ export default function render({ api, showToast }) {
     });
   }
 
-  function selectItem(idx) {
+  async function selectItem(idx) {
     selectedIdx = idx;
     renderList();
-    renderDetail();
     const sel = listBody.querySelector('.list-item.selected');
     if (sel) sel.scrollIntoView({ block: 'nearest' });
+
+    if (idx >= 0 && idx < hostItems.length) {
+      const item = hostItems[idx];
+      // Fetch category on demand if not cached
+      if (catCache[item.value] === undefined) {
+        renderDetail(); // show loading state
+        await fetchCategory(item.value);
+        item.cat = catCache[item.value] || null;
+        // Only re-render if still selected (user may have clicked elsewhere)
+        if (selectedIdx === idx) {
+          renderList();
+          renderDetail();
+        }
+      } else {
+        item.cat = catCache[item.value] || null;
+        renderDetail();
+      }
+    } else {
+      renderDetail();
+    }
   }
 
   // --- Detail panel ---
