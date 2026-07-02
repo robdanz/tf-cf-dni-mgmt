@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in values.
+# terraform.tfvars is gitignored — never commit it.
+
+cloudflare_api_token         = ""   # Bootstrap token (API Tokens Edit, Workers Scripts Edit, Access Apps Edit, Account Settings Read)
+cloudflare_account_id        = ""   # Your Cloudflare account ID
+cloudflare_workers_subdomain = ""   # e.g. "rob-danz" from rob-danz.workers.dev
+cloudflare_access_team       = ""   # e.g. "tancow" from tancow.cloudflareaccess.com
