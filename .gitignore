@@ -100,7 +100,14 @@ Thumbs.db
 # Wrangler
 .wrangler/
 
-# Project setup guides (local reference only)
+# Local-only files (never committed)
 PROJECT_SETUP_GUIDE.md
 CLAUDE.md
 AI_SETUP_INSTRUCTIONS*
+docs/
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate*
+terraform/terraform.tfvars
+terraform/.terraform.lock.hcl
