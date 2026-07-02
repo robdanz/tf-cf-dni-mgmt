@@ -85,7 +85,7 @@ export default {
           }
           // SPA fallback: serve index.html for client-side routes
           if (env.ASSETS) {
-            return env.ASSETS.fetch(new Request(new URL('/', url.origin), request));
+            return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
           }
           // No ASSETS binding (local dev without assets) -> 404
           return new Response('Not Found', { status: 404 });
