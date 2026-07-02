@@ -3,8 +3,8 @@ resource "cloudflare_api_token" "worker" {
 
   policy {
     permission_groups = [
-      data.cloudflare_api_token_permission_groups.all.account["Teams Write"],
-      data.cloudflare_api_token_permission_groups.all.account["Intel Read"],
+      local.account_permissions["Teams Write"],
+      local.account_permissions["Intel Read"],
     ]
     resources = {
       "com.cloudflare.api.account.${var.cloudflare_account_id}" = "*"

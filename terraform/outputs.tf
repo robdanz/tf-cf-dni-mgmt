@@ -5,12 +5,12 @@ output "worker_url" {
 
 output "access_app_id" {
   description = "Access application ID — attach policies to this in the Zero Trust dashboard"
-  value       = cloudflare_access_application.dni_mgmt.id
+  value       = cloudflare_zero_trust_access_application.dni_mgmt.id
 }
 
 output "access_app_aud" {
   description = "Access application AUD tag"
-  value       = cloudflare_access_application.dni_mgmt.aud
+  value       = cloudflare_zero_trust_access_application.dni_mgmt.aud
 }
 
 output "worker_api_token_id" {
