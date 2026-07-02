@@ -3,50 +3,68 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="dni-mgmt-api-base" content="https://tf-cf-dni-mgmt.rob-danz.workers.dev">
   <title>DNI List Manager</title>
   <link rel="stylesheet" href="/assets/css/app.css">
 </head>
 <body>
-  <div class="app-container">
-    <nav class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">🛡️ DNI List Manager</div>
-        <div id="buildStamp" style="font-size:0.65rem;color:#93c5fd;margin-top:0.25rem;font-family:monospace;"></div>
-      </div>
-      <div class="menu" id="menu"></div>
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="userAvatar">U</div>
-          <div>
-            <div id="userName">Loading...</div>
-            <div id="userEmail">user@example.com</div>
-          </div>
-        </div>
-      </div>
-    </nav>
-    <main class="main-content">
-      <div class="content-header" id="contentHeader">
-        <h1 class="content-title">DNI List Manager</h1>
-        <p class="content-subtitle">Zero Trust Gateway Do-Not-Inspect list management</p>
-      </div>
-      <div class="content-body" id="contentBody">
-        <div class="loading">Loading...</div>
-      </div>
-    </main>
+  <div class="top-bar">
+    <span class="top-bar-title">DNI List Manager</span>
+    <select id="sourceList" class="top-bar-select">
+      <option value="">Loading lists...</option>
+    </select>
+    <input id="searchInput" class="top-bar-search" type="text" placeholder="Filter by hostname, category, or app...">
+    <span id="entryCount" class="top-bar-count">0</span>
+    <span class="top-bar-spacer"></span>
+    <button id="settingsBtn" class="top-bar-gear" title="Settings">&#9881;</button>
+    <span id="userEmail" class="top-bar-user">Loading...</span>
   </div>
+
+  <div class="master-detail">
+    <div class="list-panel">
+      <div class="list-panel-header">Triage Queue</div>
+      <div id="listBody" class="list-panel-body">
+        <div class="loading-msg">Loading...</div>
+      </div>
+    </div>
+    <div id="detailPanel" class="detail-panel">
+      <div class="detail-empty">Select a hostname to view details</div>
+    </div>
+  </div>
+
+  <div id="drawerOverlay" class="drawer-overlay"></div>
+  <div id="drawer" class="drawer">
+    <div class="drawer-header">
+      <span class="drawer-title">List Role Assignment</span>
+      <button id="drawerClose" class="drawer-close">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-field">
+        <label>TLS Hosts Bypass (Auto Pilot)</label>
+        <select id="autopilotList"><option value="">-- Select --</option></select>
+      </div>
+      <div class="drawer-field">
+        <label>Bypass Domains (curated)</label>
+        <select id="bypassList"><option value="">-- Select --</option></select>
+      </div>
+      <div class="drawer-field">
+        <label>Bypass Hosts (curated)</label>
+        <select id="bypassHostList"><option value="">-- Select --</option></select>
+      </div>
+      <div class="drawer-field">
+        <label>Block Domains</label>
+        <select id="blockList"><option value="">-- Select --</option></select>
+      </div>
+      <div class="drawer-field">
+        <label>Block Hosts</label>
+        <select id="blockHostList"><option value="">-- Select --</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/build-info.js"></script>
-  <script>
-    (function () {
-      var el = document.getElementById('buildStamp');
-      if (!el) return;
-      var ts = window.__BUILD_TIME__;
-      if (!ts) { el.textContent = 'dev build'; return; }
-      var d = new Date(ts);
-      el.textContent = 'built ' + d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
-    })();
-  </script>
   <script type="module" src="/assets/js/app.js"></script>
 </body>
 </html>
