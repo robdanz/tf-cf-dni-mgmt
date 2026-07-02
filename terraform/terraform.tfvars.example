@@ -1,7 +1,10 @@
 # Copy to terraform.tfvars and fill in values.
 # terraform.tfvars is gitignored — never commit it.
+#
+# Create one API token at https://dash.cloudflare.com/profile/api-tokens with:
+#   Account permissions: Workers Scripts Edit, Access: Apps and Policies Edit, Teams Write, Intel Read
 
-cloudflare_api_token         = ""   # Bootstrap token (API Tokens Edit, Workers Scripts Edit, Access Apps Edit, Account Settings Read)
+cloudflare_api_token         = ""   # The API token described above
 cloudflare_account_id        = ""   # Your Cloudflare account ID
 cloudflare_workers_subdomain = ""   # Your workers subdomain (from <subdomain>.workers.dev)
 cloudflare_access_team       = ""   # Your Access team name (from <team>.cloudflareaccess.com)

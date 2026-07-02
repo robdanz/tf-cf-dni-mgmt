@@ -34,7 +34,7 @@ resource "null_resource" "worker_secrets" {
   depends_on = [null_resource.worker_deploy]
 
   triggers = {
-    token_id    = cloudflare_api_token.worker.id
+    token_hash  = sha256(var.cloudflare_api_token)
     account_id  = var.cloudflare_account_id
     access_aud  = cloudflare_zero_trust_access_application.dni_mgmt.aud
     access_team = var.cloudflare_access_team
@@ -51,7 +51,7 @@ resource "null_resource" "worker_secrets" {
     environment = {
       CLOUDFLARE_API_TOKEN  = var.cloudflare_api_token
       CLOUDFLARE_ACCOUNT_ID = var.cloudflare_account_id
-      WORKER_CF_TOKEN       = cloudflare_api_token.worker.value
+      WORKER_CF_TOKEN       = var.cloudflare_api_token
       WORKER_ACCOUNT_ID     = var.cloudflare_account_id
       WORKER_ACCESS_AUD     = cloudflare_zero_trust_access_application.dni_mgmt.aud
       WORKER_ACCESS_TEAM    = var.cloudflare_access_team

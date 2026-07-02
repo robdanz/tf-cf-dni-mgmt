@@ -12,8 +12,3 @@ output "access_app_aud" {
   description = "Access application AUD tag"
   value       = cloudflare_zero_trust_access_application.dni_mgmt.aud
 }
-
-output "worker_api_token_id" {
-  description = "Worker runtime API token ID (for reference/rotation)"
-  value       = cloudflare_api_token.worker.id
-}

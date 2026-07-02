@@ -1,5 +1,5 @@
 variable "cloudflare_api_token" {
-  description = "Bootstrap API token with broad permissions (API Tokens Edit, Workers Scripts Edit, Access Apps Edit, Account Settings Read)"
+  description = "API token (Workers Scripts Edit, Access: Apps and Policies Edit, Teams Write, Intel Read)"
   type        = string
   sensitive   = true
 }
