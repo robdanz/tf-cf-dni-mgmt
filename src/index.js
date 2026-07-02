@@ -426,7 +426,7 @@ async function handleIntelDomain(request, corsHeaders, env) {
     return {
       contentCats: toNames(d.content_categories || d.contentCategories),
       securityCats: toNames(d.security_categories || d.securityCategories),
-      app: d.application && (d.application.name || d.application.label || d.application),
+      app: d.application && (typeof d.application === 'string' ? d.application : (d.application.name || d.application.label || JSON.stringify(d.application))),
       riskTypes: toNames(d.risk_types || d.riskTypes),
     };
   }
