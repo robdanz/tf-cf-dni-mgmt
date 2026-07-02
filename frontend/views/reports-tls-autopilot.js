@@ -201,6 +201,11 @@ export default function render({ api, showToast }) {
     const blockHostId = document.getElementById('blockHostList')?.value;
     const sourceId = sourceSelect.value;
 
+    function listName(id) {
+      const l = lists.find(x => x.id === id);
+      return l ? (l.name || l.id) : id;
+    }
+
     let pillsHtml = '';
     if (cat) {
       (cat.content_categories || []).forEach(c => { pillsHtml += '<span class="pill pill-content">' + escHtml(c) + '</span>'; });
@@ -235,13 +240,13 @@ export default function render({ api, showToast }) {
       '<div class="detail-actions">' +
         '<div class="action-group-label">Bypass</div>' +
         '<div class="action-row">' +
-          (bypassId ? '<button class="action-btn bypass-domain" data-action="move" data-target="' + bypassId + '" data-mode="domain" data-label="domain bypass">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
-          (bypassHostId ? '<button class="action-btn bypass-host" data-action="move" data-target="' + bypassHostId + '" data-mode="host" data-label="host bypass">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
+          (bypassId ? '<button class="action-btn bypass-domain" data-action="move" data-target="' + bypassId + '" data-mode="domain" data-label="domain bypass" title="Target: ' + escHtml(listName(bypassId)) + '">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
+          (bypassHostId ? '<button class="action-btn bypass-host" data-action="move" data-target="' + bypassHostId + '" data-mode="host" data-label="host bypass" title="Target: ' + escHtml(listName(bypassHostId)) + '">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
         '</div>' +
         '<div class="action-group-label">Block</div>' +
         '<div class="action-row">' +
-          (blockId ? '<button class="action-btn block-domain" data-action="move" data-target="' + blockId + '" data-mode="domain" data-label="domain block">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
-          (blockHostId ? '<button class="action-btn block-host" data-action="move" data-target="' + blockHostId + '" data-mode="host" data-label="host block">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
+          (blockId ? '<button class="action-btn block-domain" data-action="move" data-target="' + blockId + '" data-mode="domain" data-label="domain block" title="Target: ' + escHtml(listName(blockId)) + '">Domain<span class="action-btn-value">' + escHtml(domain) + '</span></button>' : '') +
+          (blockHostId ? '<button class="action-btn block-host" data-action="move" data-target="' + blockHostId + '" data-mode="host" data-label="host block" title="Target: ' + escHtml(listName(blockHostId)) + '">Host<span class="action-btn-value">' + escHtml(hostname) + '</span></button>' : '') +
         '</div>' +
         (sourceId ? '<button class="action-btn remove" data-action="remove">Remove from queue</button>' : '') +
       '</div>';
