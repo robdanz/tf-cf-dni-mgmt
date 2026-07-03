@@ -302,7 +302,22 @@ export default function render({ api, showToast }) {
 
       const removedCount = data.removedCount ?? 1;
       const value = data.value || hostname;
-      showToast('Moved to ' + label + ': ' + value + ' (' + removedCount + ' entr' + (removedCount === 1 ? 'y' : 'ies') + ' removed)', 'success');
+      const undoMove = async () => {
+        // Remove the value from target list
+        await api('/api/gateway/lists/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listId: targetId, value })
+        });
+        // Add the original hostname back to source list
+        await api('/api/gateway/lists/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listId: sourceId, value: hostname })
+        });
+        await refetchAndReload(sourceId);
+      };
+      showToast('Moved to ' + label + ': ' + value + ' (' + removedCount + ' entr' + (removedCount === 1 ? 'y' : 'ies') + ' removed)', 'success', undoMove);
 
       await refetchAndReload(sourceId);
     } catch (e) {
@@ -324,7 +339,15 @@ export default function render({ api, showToast }) {
       });
       if (data.error) throw new Error(data.error);
 
-      showToast('Removed from queue: ' + hostname, 'success');
+      const undoRemove = async () => {
+        await api('/api/gateway/lists/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listId: sourceId, value: hostname })
+        });
+        await refetchAndReload(sourceId);
+      };
+      showToast('Removed from queue: ' + hostname, 'success', undoRemove);
       await refetchAndReload(sourceId);
     } catch (e) {
       showToast(e.message, 'error');

@@ -404,6 +404,28 @@ body {
 .toast.success { border-left-color: #10b981; }
 .toast.error { border-left-color: #ef4444; }
 
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.toast-undo {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.toast-undo:hover { background: var(--accent); }
+.toast-undo:disabled { opacity: 0.5; cursor: not-allowed; }
+
 @keyframes toast-in {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }

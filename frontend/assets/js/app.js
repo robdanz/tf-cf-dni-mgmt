@@ -16,14 +16,39 @@
     return data;
   }
 
-  function showToast(message, type = 'success') {
+  function showToast(message, type = 'success', onUndo) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
     const el = document.createElement('div');
     el.className = 'toast ' + type;
-    el.textContent = message;
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = message;
+    el.appendChild(textSpan);
+
+    let timer;
+    if (onUndo && type === 'success') {
+      const btn = document.createElement('button');
+      btn.textContent = 'Undo';
+      btn.className = 'toast-undo';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Undoing...';
+        clearTimeout(timer);
+        try {
+          await onUndo();
+          el.remove();
+          showToast('Action undone', 'success');
+        } catch (e) {
+          el.remove();
+          showToast('Undo failed: ' + e.message, 'error');
+        }
+      });
+      el.appendChild(btn);
+    }
+
     container.appendChild(el);
-    setTimeout(() => { el.remove(); }, 4000);
+    timer = setTimeout(() => { el.remove(); }, onUndo ? 8000 : 4000);
   }
 
   async function loadUser() {

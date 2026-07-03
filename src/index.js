@@ -61,6 +61,9 @@ export default {
         case '/api/gateway/lists/remove':
           return handleGatewayListRemove(request, corsHeaders, env);
 
+        case '/api/gateway/lists/add':
+          return handleGatewayListAdd(request, corsHeaders, env);
+
         case '/api/intel/domain':
           return handleIntelDomain(request, corsHeaders, env);
 
@@ -365,6 +368,58 @@ async function handleGatewayListRemove(request, corsHeaders, env) {
     });
   } catch (error) {
     console.error('Gateway list remove error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
+
+/**
+ * Add a value to a Gateway list. Used by undo to restore entries.
+ */
+async function handleGatewayListAdd(request, corsHeaders, env) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) {
+    return new Response(JSON.stringify({ error: 'Missing Cloudflare API credentials' }), {
+      status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+
+  try {
+    const body = await request.json();
+    const { listId, value } = body;
+    if (!listId || value == null || value === '') {
+      return new Response(JSON.stringify({ error: 'listId and value are required' }), {
+        status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/gateway/lists`;
+    const headers = { 'Authorization': 'Bearer ' + apiToken, 'Content-Type': 'application/json' };
+
+    const addRes = await fetch(`${base}/${listId}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ append: [{ value: String(value).trim() }] })
+    });
+
+    if (!addRes.ok) {
+      const errText = await addRes.text();
+      if (!/duplicate|already exist/i.test(errText)) {
+        throw new Error('Failed to add entry: ' + parseApiError(errText));
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, added: String(value).trim(), message: 'Entry added to list' }), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  } catch (error) {
+    console.error('Gateway list add error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
