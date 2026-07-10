@@ -4,8 +4,8 @@
  * Serves both the REST API and static frontend (via Workers Static Assets).
  */
 
-import psl from 'psl';
 import { verifyAccessJwt } from './auth.js';
+import { getRegistrableDomain, stripFirstLabel } from './domain.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -434,22 +434,6 @@ function parseApiError(text) {
   } catch {
     return String(text).slice(0, 200);
   }
-}
-
-function getRegistrableDomain(hostname) {
-  const s = String(hostname || '').trim();
-  if (!s) return null;
-  try { return psl.get(s) || null; } catch { return null; }
-}
-
-function stripFirstLabel(hostname) {
-  const s = String(hostname || '').trim().toLowerCase();
-  if (!s) return null;
-  const dot = s.indexOf('.');
-  if (dot < 0) return null;
-  const stripped = s.slice(dot + 1);
-  if (psl.get(stripped)) return stripped;
-  return null;
 }
 
 async function handleIntelDomain(request, corsHeaders, env) {

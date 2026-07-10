@@ -38,6 +38,6 @@
     "transform": {}
   },
   "dependencies": {
-    "psl": "^1.15.0"
+    "tldts": "^7.4.8"
   }
 }
