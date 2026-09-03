@@ -4,7 +4,9 @@
   "description": "DNI List Manager - Zero Trust Gateway Do-Not-Inspect list management",
   "main": "src/index.js",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "npm run stamp && wrangler dev",
+    "deploy": "npm run stamp && wrangler deploy",
+    "deploy:dry": "npm run stamp && wrangler deploy --dry-run",
     "stamp": "node -e \"require('fs').writeFileSync('frontend/assets/js/build-info.js', 'window.__BUILD_TIME__=\\\"' + new Date().toISOString() + '\\\";\\n')\"",
     "test": "jest",
     "test:watch": "jest --watch",

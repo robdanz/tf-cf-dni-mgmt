@@ -7,7 +7,6 @@ Manages Zero Trust Gateway Do-Not-Inspect (DNI) hostname lists. A single Cloudfl
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # add your API token and account ID
-npm run stamp                    # generate frontend/assets/js/build-info.js
 npm run dev                      # Worker + frontend on :8787
 ```
 
@@ -15,16 +14,17 @@ Open http://localhost:8787 — the Worker serves the SPA and the API from the sa
 
 ## Deploy
 
-There is no `npm run deploy` script. Deploy with wrangler directly, after stamping the
-build info file (`frontend/assets/js/build-info.js` is gitignored and generated):
-
 ```bash
-npm run stamp
-npx wrangler deploy
+npm run deploy       # stamp build info, then publish Worker + frontend
+npm run deploy:dry   # same, but --dry-run (validate without publishing)
 ```
 
-This publishes the Worker (`src/index.js`) and uploads `frontend/` as static assets in a
-single deployment. There is no separate Pages project.
+One deploy publishes the Worker (`src/index.js`) and uploads `frontend/` as static
+assets. There is no separate Pages project and no second command for the frontend.
+
+`npm run dev` and `npm run deploy` both run `npm run stamp` first, which regenerates
+`frontend/assets/js/build-info.js` (gitignored) with the current timestamp. Read it back
+as `window.__BUILD_TIME__` in the browser console to confirm which build is live.
 
 ## Project Structure
 
