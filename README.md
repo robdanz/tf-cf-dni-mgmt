@@ -57,15 +57,33 @@ and the API will 401.
 sends no token of its own. It verifies the signature against `<team>.cloudflareaccess.com`
 JWKS, then checks `aud` / `iss` / `exp`.
 
-So a `401 Unauthorized` from `/api/*` means one of exactly three things:
+A 401 therefore says nothing about the *user* — it almost always means the deployment is
+incomplete. The response carries a machine-readable `reason` and an operator-facing `hint`
+so you don't have to guess which:
 
-1. No Access app in front of the hostname → no header is ever injected.
-2. `ACCESS_TEAM` unset or wrong → JWKS fetch fails. Use the bare team name
-   (`myteam`), **not** the full domain (`myteam.cloudflareaccess.com`).
-3. `ACCESS_AUD` unset or not matching the app actually serving the hostname.
+```json
+{
+  "error": "Unauthorized",
+  "reason": "aud_mismatch",
+  "hint": "Token audience does not match ACCESS_AUD. The secret must hold the AUD tag of the Access application actually serving this hostname — a stale value from a different or recreated app is the usual cause."
+}
+```
 
-A complete `terraform apply` rules out all three. `localhost` / `127.0.0.1` bypass auth
-entirely, so local dev needs none of it.
+| `reason` | Meaning |
+|---|---|
+| `not_configured` | `ACCESS_TEAM` / `ACCESS_AUD` unset — the account was never fully provisioned |
+| `no_token` | No Access app in front of the hostname, so no header is injected |
+| `jwks_unavailable` | `ACCESS_TEAM` wrong — often the full domain instead of the bare team name |
+| `aud_mismatch` | `ACCESS_AUD` doesn't match the app serving this hostname (stale or recreated app) |
+| `iss_mismatch` | The app protecting this hostname belongs to a different team |
+| `token_expired` | Genuine — re-authenticate |
+| `malformed_token`, `unknown_key`, `bad_signature`, `no_identity` | Token-level faults |
+
+The same reason is logged, so `npx wrangler tail` shows it for requests you can't inspect
+directly. Hints describe the deployment fault only — never token contents or secret values.
+
+A complete `terraform apply` rules out the whole top half of that table. `localhost` /
+`127.0.0.1` bypass auth entirely, so local dev needs none of it.
 
 ## Local development
 

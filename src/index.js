@@ -4,7 +4,7 @@
  * Serves both the REST API and static frontend (via Workers Static Assets).
  */
 
-import { verifyAccessJwt } from './auth.js';
+import { verifyAccessJwt, authFailureHint } from './auth.js';
 import { getRegistrableDomain, stripFirstLabel } from './domain.js';
 
 export default {
@@ -31,9 +31,13 @@ export default {
     // Auth gate: all /api/* routes (except /health) require a valid Access JWT.
     // Localhost bypasses auth for local dev.
     if (url.pathname.startsWith('/api/') && !isLocal) {
-      const user = await verifyAccessJwt(request, env);
+      const { user, reason } = await verifyAccessJwt(request, env);
       if (!user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        // Follows the { error, hint } convention: a bare 401 here is
+        // indistinguishable between "no Access app", "secrets unset" and
+        // "wrong AUD", which makes standing up a new account guesswork.
+        console.warn('Auth rejected:', reason, url.pathname);
+        return new Response(JSON.stringify({ error: 'Unauthorized', reason, hint: authFailureHint(reason) }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' }
         });
